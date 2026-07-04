@@ -1,0 +1,21 @@
+# Ambiente virtual
+venv/
+
+# Senhas e configurações
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos estáticos gerados
+staticfiles/
+
+# Banco de dados local
+*.sqlite3
+
+# Sistema
+.DS_Store
+*.log

@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YardMaster</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #080c14;
+  --surface:  #0e1420;
+  --surface2: #141b2d;
+  --surface3: #1a2238;
+  --border:   #1e2a42;
+  --border2:  #243050;
+  --text:     #e2e8f0;
+  --muted:    #4a5875;
+  --muted2:   #6b7fa8;
+  --accent:   #00e5a0;
+  --accent2:  #00b87a;
+  --danger:   #ff4d6d;
+  --warn:     #ffb340;
+  --info:     #4d9fff;
+  --purple:   #9d7dff;
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'DM Sans', sans-serif;
+}
+
+/* ── LIGHT THEME ── */
+body.light {
+  --bg:       #f0f2f5;
+  --surface:  #ffffff;
+  --surface2: #f8f9fb;
+  --surface3: #eef0f4;
+  --border:   #dde1e9;
+  --border2:  #c8cdd8;
+  --text:     #1a202c;
+  --muted:    #8a94a8;
+  --muted2:   #5a6478;
+  --accent:   #00a870;
+  --accent2:  #007a50;
+  --danger:   #e53e5a;
+  --warn:     #d97706;
+  --info:     #2563eb;
+  --purple:   #7c3aed;
+}
+
+/* Light mode overrides */
+body.light td input.cell-input,
+body.light td select.cell-input { background: #fffde7; color: #1a202c; }
+body.light tbody td:first-child { background: var(--surface2); }
+body.light tbody td { background: var(--bg); }
+body.light .logo { color: #1a202c; }
+body.light .logo span { color: var(--accent); }
+body.light .topbar::after { opacity: 0.2; }
+
+body { font-family: var(--sans); background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
+
+/* ── TOPBAR ── */
+.topbar {
+  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 14px;
+  flex-shrink: 0; position: relative; z-index: 100;
+}
+.topbar::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.35; }
+.logo { font-family: var(--mono); font-size: 15px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px; text-decoration: none; }
+.logo-icon { width: 24px; height: 24px; border-radius: 5px; background: linear-gradient(135deg, var(--accent), #0088ff); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.logo span { color: var(--accent); }
+.nav-item { padding: 4px 11px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted2); transition: all 0.15s; text-decoration: none; }
+.nav-item.active, .nav-item:hover { background: var(--surface3); color: var(--text); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.user-chip { display: flex; align-items: center; gap: 7px; padding: 3px 9px; border-radius: 20px; background: var(--surface3); border: 1px solid var(--border2); font-size: 12px; }
+.user-avatar { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #0088ff); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #000; }
+.admin-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(0,229,160,0.15); color: var(--accent); font-family: var(--mono); font-weight: 600; }
+.btn-logout { font-size: 11px; padding: 4px 10px; border-radius: 6px; background: transparent; border: 1px solid var(--border2); color: var(--muted2); cursor: pointer; font-family: var(--sans); transition: all 0.15s; }
+.btn-logout:hover { border-color: var(--danger); color: var(--danger); }
+.btn-theme {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--surface3); border: 1px solid var(--border2);
+  cursor: pointer; font-size: 14px; display: flex;
+  align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.btn-theme:hover { border-color: var(--accent); transform: rotate(20deg); }
+
+/* ── STATS + FILTERS BAR ── */
+.top-bar {
+  display: flex; align-items: center; gap: 0;
+  padding: 0 20px; height: 50px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.stat-pills { display: flex; align-items: center; gap: 6px; flex: 1; }
+.stat-pill {
+  display: flex; align-items: center; gap: 8px; padding: 5px 14px;
+  border-radius: 7px; background: var(--surface3); border: 1px solid var(--border2);
+  white-space: nowrap; flex: 1; justify-content: center;
+}
+.pill-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); font-family: var(--mono); }
+.pill-val   { font-size: 18px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+.bar-sep    { width: 1px; background: var(--border); height: 30px; margin: 0 16px; flex-shrink: 0; }
+.filter-inline { display: flex; align-items: center; gap: 8px; }
+.fi-label  { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+.fi-input, .fi-select {
+  height: 27px; padding: 0 8px; background: var(--bg);
+  border: 1px solid var(--border2); border-radius: 5px;
+  color: var(--text); font-size: 11px; font-family: var(--sans); outline: none;
+}
+.fi-input        { width: 114px; }
+.fi-input.wide   { width: 180px; }
+.fi-select       { width: 108px; }
+.fi-input:focus, .fi-select:focus { border-color: var(--accent); }
+.fi-btn { height: 27px; padding: 0 12px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; font-family: var(--sans); transition: all 0.15s; white-space: nowrap; }
+.fi-btn-apply { background: var(--accent); color: #000; }
+.fi-btn-clear { background: transparent; color: var(--muted2); border: 1px solid var(--border2); }
+
+/* ── TABLE TOOLBAR ── */
+.tbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 20px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; background: var(--surface);
+}
+.tbar-info { font-size: 11px; color: var(--muted2); font-family: var(--mono); }
+.tbar-info strong { color: var(--accent); }
+.tbar-sep { flex: 1; }
+.tbar-search { padding: 4px 9px; background: var(--bg); border: 1px solid var(--border2); border-radius: 5px; color: var(--text); font-size: 11px; font-family: var(--sans); width: 200px; outline: none; }
+.tbar-search:focus { border-color: var(--accent); }
+.tbar-btn { height: 26px; padding: 0 10px; border-radius: 5px; font-size: 11px; cursor: pointer; border: none; font-family: var(--sans); transition: all 0.15s; }
+.tbar-btn-add    { background: var(--accent); color: #000; font-weight: 600; }
+.tbar-btn-add:hover { background: var(--accent2); }
+.tbar-btn-import { background: transparent; color: var(--info); border: 1px solid rgba(77,159,255,0.3); }
+.tbar-btn-export { background: transparent; color: var(--purple); border: 1px solid rgba(157,125,255,0.3); }
+.tbar-btn-del    { background: transparent; color: var(--danger); border: 1px solid rgba(255,77,109,0.3); }
+
+/* ── TABLE ── */
+.table-wrap { flex: 1; overflow: auto; }
+table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+
+thead th {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 7px 10px; white-space: nowrap; font-weight: 600;
+  color: var(--muted2); text-align: left;
+  font-family: var(--mono); font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  cursor: pointer; user-select: none; min-width: 80px;
+}
+thead th:first-child { width: 38px; min-width: 38px; position: sticky; left: 0; z-index: 21; }
+thead th:hover { color: var(--text); }
+
+tbody tr { border-bottom: 1px solid var(--border); }
+tbody tr:hover td { background: var(--surface2) !important; }
+tbody tr.row-selected td { background: #1a2840 !important; }
+
+tbody td { border-right: 1px solid var(--border); padding: 0; white-space: nowrap; background: var(--bg); position: relative; }
+tbody td:first-child { position: sticky; left: 0; z-index: 5; background: var(--surface); text-align: center; padding: 0 6px; }
+
+.cell-inner { padding: 5px 10px; min-height: 30px; display: flex; align-items: center; cursor: default; overflow: hidden; max-width: 180px; text-overflow: ellipsis; font-size: 12px; }
+td.editable .cell-inner { cursor: cell; }
+td.editable:hover .cell-inner { background: rgba(0,229,160,0.04); }
+td.editing .cell-inner { display: none; }
+
+td input.cell-input, td select.cell-input {
+  position: absolute; inset: 0; background: #0a1a0a;
+  border: 2px solid var(--accent); padding: 4px 8px;
+  font-size: 12px; font-family: inherit; color: #fff; z-index: 10; width: 100%;
+}
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-family: var(--mono); }
+.badge-Sun { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.badge-Mon { background: rgba(77,159,255,0.15); color: var(--info); border: 1px solid rgba(77,159,255,0.2); }
+.badge-Tue { background: rgba(157,125,255,0.15); color: var(--purple); border: 1px solid rgba(157,125,255,0.2); }
+.badge-Wed { background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.2); }
+.badge-Thu { background: rgba(251,113,133,0.15); color: #fb7185; border: 1px solid rgba(251,113,133,0.2); }
+.badge-Fri { background: rgba(163,230,53,0.12); color: #a3e635; border: 1px solid rgba(163,230,53,0.2); }
+.badge-Sat { background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid rgba(251,146,60,0.2); }
+
+.status-Loaded    { background: rgba(0,229,160,0.12); color: var(--accent); font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-family: var(--mono); border: 1px solid rgba(0,229,160,0.2); }
+.status-On        { background: rgba(255,179,64,0.12); color: var(--warn); font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-family: var(--mono); border: 1px solid rgba(255,179,64,0.25); }
+.status-Pending   { background: rgba(77,159,255,0.1); color: var(--info); font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-family: var(--mono); border: 1px solid rgba(77,159,255,0.2); }
+.status-Cancelled { background: rgba(255,77,109,0.1); color: var(--danger); font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-family: var(--mono); border: 1px solid rgba(255,77,109,0.2); }
+.status-Consolidated { background: rgba(255,179,64,0.12); color: var(--warn); font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-family: var(--mono); border: 1px solid rgba(255,179,64,0.25); }
+.status-Wrapped { background: rgba(167,139,250,0.15); color: #a78bfa; font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-family: var(--mono); border: 1px solid rgba(167,139,250,0.3); }
+
+.del-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: var(--mono); font-weight: 700; background: rgba(157,125,255,0.12); color: var(--purple); }
+.row-num { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+/* Row flags — manual */
+tr.flag-red td        { background: rgba(255,77,109,0.18) !important; }
+tr.flag-green td      { background: rgba(0,229,160,0.15) !important; }
+tr.flag-blue td       { background: rgba(77,159,255,0.15) !important; }
+tr.flag-yellow td     { background: rgba(255,179,64,0.18) !important; }
+tr.flag-lightblue td  { background: rgba(125,211,252,0.14) !important; }
+tr.flag-lightgreen td { background: rgba(134,239,172,0.14) !important; }
+
+/* Row colors by status — dark mode (strong) */
+tr.status-row-Loaded td         { background: #14532d !important; border-bottom: 1px solid #16a34a !important; }
+tr.status-row-Loaded:hover td   { background: #166534 !important; }
+tr.status-row-OntheLoad td      { background: #713f12 !important; border-bottom: 1px solid #d97706 !important; }
+tr.status-row-OntheLoad:hover td{ background: #92400e !important; }
+tr.status-row-Consolidated td        { background: #713f12 !important; border-bottom: 1px solid #d97706 !important; }
+tr.status-row-Consolidated:hover td  { background: #92400e !important; }
+tr.status-row-WrappedandReadytoLoad td        { background: #3b1f6e !important; border-bottom: 1px solid #7c3aed !important; }
+tr.status-row-WrappedandReadytoLoad:hover td  { background: #4c2889 !important; }
+tr.status-row-Pending td        { background: #1e3a5f !important; border-bottom: 1px solid #2d5a8e !important; }
+tr.status-row-Pending:hover td  { background: #244872 !important; }
+tr.status-row-Cancelled td      { background: #7f1d1d !important; border-bottom: 1px solid #dc2626 !important; }
+tr.status-row-Cancelled:hover td{ background: #991b1b !important; }
+
+/* Row colors by status — light mode (strong) */
+body.light tr.status-row-Loaded td         { background: #4ade80 !important; border-bottom: 1px solid #22c55e !important; color: #14532d; }
+body.light tr.status-row-Loaded:hover td   { background: #22c55e !important; }
+body.light tr.status-row-OntheLoad td      { background: #fbbf24 !important; border-bottom: 1px solid #f59e0b !important; color: #78350f; }
+body.light tr.status-row-OntheLoad:hover td{ background: #f59e0b !important; }
+body.light tr.status-row-Consolidated td        { background: #fbbf24 !important; border-bottom: 1px solid #f59e0b !important; color: #78350f; }
+body.light tr.status-row-Consolidated:hover td  { background: #f59e0b !important; }
+body.light tr.status-row-WrappedandReadytoLoad td        { background: #ddd6fe !important; border-bottom: 1px solid #a78bfa !important; color: #4c1d95; }
+body.light tr.status-row-WrappedandReadytoLoad:hover td  { background: #c4b5fd !important; }
+body.light tr.status-row-Pending td        { background: #bfdbfe !important; border-bottom: 1px solid #93c5fd !important; color: #1e3a8a; }
+body.light tr.status-row-Pending:hover td  { background: #93c5fd !important; }
+body.light tr.status-row-Cancelled td      { background: #f87171 !important; border-bottom: 1px solid #ef4444 !important; color: #7f1d1d; }
+body.light tr.status-row-Cancelled:hover td{ background: #ef4444 !important; color: #fff; }
+
+/* Light mode flag rows */
+body.light tr.flag-red td        { background: #fecdd3 !important; }
+body.light tr.flag-green td      { background: #bbf7d0 !important; }
+body.light tr.flag-blue td       { background: #bfdbfe !important; }
+body.light tr.flag-yellow td     { background: #fef08a !important; }
+body.light tr.flag-lightblue td  { background: #e0f2fe !important; }
+body.light tr.flag-lightgreen td { background: #dcfce7 !important; }
+
+/* Context menu */
+#ctx-menu { position: fixed; z-index: 9000; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); display: none; min-width: 160px; }
+#ctx-menu .ctx-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); padding: 4px 8px 8px; font-family: var(--mono); }
+.ctx-colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px 6px 8px; }
+.ctx-color { height: 28px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; display: flex; align-items: center; justify-content: center; }
+.ctx-color:hover { transform: scale(1.1); border-color: rgba(255,255,255,0.3); }
+.ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+.ctx-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text); transition: background 0.1s; }
+.ctx-item:hover { background: var(--surface3); }
+.ctx-item.danger { color: var(--danger); }
+
+/* Import modal */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 8000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--surface2); border: 1px solid var(--border2); border-radius: 14px; padding: 28px; width: 500px; max-width: 95vw; box-shadow: 0 24px 64px rgba(0,0,0,0.7); }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.modal p { font-size: 12px; color: var(--muted2); margin-bottom: 20px; }
+.drop-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 32px 20px; text-align: center; cursor: pointer; color: var(--muted2); font-size: 13px; transition: all 0.2s; }
+.drop-zone:hover, .drop-zone.over { border-color: var(--accent); background: rgba(0,229,160,0.04); color: var(--accent); }
+.drop-zone input { display: none; }
+.import-result { margin-top: 16px; font-size: 12px; display: none; padding: 12px; border-radius: 8px; }
+.import-result.ok  { background: rgba(0,229,160,0.1); color: var(--accent); }
+.import-result.err { background: rgba(255,77,109,0.1); color: var(--danger); }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.btn-sm { padding: 7px 16px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; font-family: inherit; }
+.btn-sm.primary { background: var(--accent); color: #000; }
+.btn-sm.outline { background: transparent; color: var(--muted2); border: 1px solid var(--border2); }
+.unmapped-list { margin-top: 8px; font-size: 11px; color: var(--warn); }
+
+/* Toast */
+#toast { position: fixed; bottom: 24px; right: 24px; background: var(--accent); color: #000; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; z-index: 9999; }
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.error { background: var(--danger); color: #fff; }
+
+.empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty p { font-size: 15px; margin-bottom: 8px; }
+.empty small { font-size: 12px; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+<body>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="{% url 'load_list' %}" class="logo"><div class="logo-icon">⬡</div>Yard<span>Master</span></a>
+  <a href="{% url 'load_list' %}" class="nav-item active">Loads</a>
+  {% if is_admin %}
+  <a href="{% url 'store_list' %}" class="nav-item">Stores</a>
+  <a href="{% url 'driver_list' %}" class="nav-item">Drivers</a>
+  <a href="{% url 'company_list' %}" class="nav-item">Companies</a>
+  {% endif %}
+  <div class="topbar-right">
+    <button class="btn-theme" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+    <div class="user-chip">
+      <div class="user-avatar">{{ request.user.username|first|upper }}</div>
+      <span>{{ request.user.username }}</span>
+      {% if is_admin %}<span class="admin-badge">ADMIN</span>{% endif %}
+    </div>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn-logout">Logout</button></form>
+  </div>
+</div>
+
+<!-- STATS + FILTERS BAR -->
+<div class="top-bar">
+  <div class="stat-pills">
+    <div class="stat-pill">
+      <span class="pill-label">Loads</span>
+      <span class="pill-val" style="color:var(--info)">{{ total }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Loaded</span>
+      <span class="pill-val" style="color:var(--accent)">{{ loaded }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">On Load</span>
+      <span class="pill-val" style="color:var(--warn)">{{ on_load }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Pallets</span>
+      <span class="pill-val">{{ total_pallets }}</span>
+    </div>
+  </div>
+
+  <div class="bar-sep"></div>
+
+  <div class="filter-inline">
+    <span class="fi-label">Date</span>
+    <input class="fi-input" type="date" id="f-date" value="{{ date_filter }}">
+    <span class="fi-label">Day</span>
+    <select class="fi-select" id="f-day">
+      <option value="">All</option>
+      {% for d in day_choices %}<option value="{{ d }}" {% if day_filter == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+    </select>
+    <span class="fi-label">Consolidated</span>
+    <select class="fi-select" id="f-status">
+      <option value="">All</option>
+      {% for s in consolidated_choices %}<option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    <input class="fi-input wide" type="text" id="f-search" placeholder="Store, driver, trailer…" value="{{ search }}">
+    <button class="fi-btn fi-btn-apply" onclick="applyFilters()">Apply</button>
+    <button class="fi-btn fi-btn-clear" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<!-- TABLE TOOLBAR -->
+<div class="tbar">
+  <div class="tbar-info">Showing <strong>{{ loads|length }}</strong> loads{% if request.GET %} &nbsp;·&nbsp; filtered{% endif %}</div>
+  <div class="tbar-sep"></div>
+  <input class="tbar-search" type="text" id="quick-search" placeholder="🔍  Quick search…" oninput="quickSearch(this.value)">
+  {% if is_admin %}
+  <button class="tbar-btn tbar-btn-add" onclick="addRow()">+ Add Load</button>
+  <button class="tbar-btn tbar-btn-import" onclick="openImport()">↑ Import</button>
+  {% endif %}
+  <button class="tbar-btn tbar-btn-export" onclick="exportCSV()">↓ Export</button>
+  {% if is_admin %}
+  <button class="tbar-btn tbar-btn-del" id="btn-delete" onclick="deleteSelected()" disabled>✕ Delete</button>
+  {% endif %}
+</div>
+
+<!-- TABLE -->
+<div class="table-wrap">
+  <table id="grid">
+    <thead>
+        <tr>
+          <th><input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)"></th>
+          <th>Day</th>
+          <th>Date</th>
+          <th>Del Seq</th>
+          <th>Split/Full</th>
+          <th style="min-width:160px">Store Name</th>
+          <th>Store ID</th>
+          <th>Final Plt</th>
+          <th>Bay No</th>
+          <th>Time Arrived</th>
+          <th>Departure Time</th>
+          <th>Time Departed</th>
+          <th style="min-width:150px">Driver Name</th>
+          <th style="min-width:150px">Company</th>
+          <th>Sched ETA</th>
+          <th>Date Dep.</th>
+          <th>Trailer No.</th>
+          <th>Consolidated</th>
+          <th>Revised ETA</th>
+          <th style="min-width:160px">Comment</th>
+          <th style="min-width:160px; color:#c8a800;">Pre-checked Load By</th>
+          <th style="min-width:170px; color:#c8a800;">Supervisor Checked Load</th>
+        </tr>
+      </thead>
+    <tbody>
+        {% for load in loads %}
+        <tr data-id="{{ load.pk }}" id="row-{{ load.pk }}" class="{% if load.row_color %}flag-{{ load.row_color }}{% else %}status-row-{{ load.consolidated|cut:' ' }}{% endif %}" oncontextmenu="openCtxMenu(event, {{ load.pk }}, '{{ load.row_color }}')">
+          <td>
+            <input type="checkbox" class="row-chk" onchange="toggleRowCheck({{ load.pk }}, this.checked)">
+          </td>
+
+          {% if is_admin %}
+          <td class="editable" data-id="{{ load.pk }}" data-field="day" data-type="select" data-choices="Sun,Mon,Tue,Wed,Thu,Fri,Sat">
+            <div class="cell-inner"><span class="badge badge-{{ load.day }}">{{ load.day }}</span></div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="date" data-type="date">
+            <div class="cell-inner">{{ load.date|default:'' }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="del_type" data-type="select" data-choices=",HB,BD,MID">
+            <div class="cell-inner">{{ load.del_type }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="split_full" data-type="select" data-choices="Full,Split">
+            <div class="cell-inner">{{ load.split_full }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="store" data-type="fk-select" data-fk="stores"
+              data-current-id="{{ load.store.pk|default:'' }}" data-current-label="{{ load.get_store_display }}">
+            <div class="cell-inner">{{ load.get_store_display }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="store_code">
+            <div class="cell-inner">{{ load.get_store_code }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="final_plt" data-type="number">
+            <div class="cell-inner">{{ load.final_plt|default:'' }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="bay">
+            <div class="cell-inner">{{ load.bay }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="time_arrive" data-type="time">
+            <div class="cell-inner">{{ load.time_arrive|default:'' }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="departure_time" data-type="time">
+            <div class="cell-inner">{{ load.departure_time|default:'' }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="time_departed" data-type="time">
+            <div class="cell-inner">{{ load.time_departed|default:'' }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="driver" data-type="fk-select" data-fk="drivers"
+              data-current-id="{{ load.driver_id|default:'' }}" data-current-label="{{ load.get_driver_display }}">
+            <div class="cell-inner">{{ load.get_driver_display }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="company" data-type="fk-select" data-fk="companies"
+              data-current-id="{{ load.company_id|default:'' }}" data-current-label="{{ load.get_company_display }}">
+            <div class="cell-inner">{{ load.get_company_display }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="schedule_eta">
+            <div class="cell-inner">{{ load.schedule_eta }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="date_departed" data-type="date">
+            <div class="cell-inner">{{ load.date_departed|default:'' }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="trailer_no">
+            <div class="cell-inner">{{ load.trailer_no }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="consolidated" data-type="select" data-choices=",Loaded,On the Load,Pending,Cancelled,Consolidated,Wrapped and Ready to Load">
+            <div class="cell-inner">
+              {% if load.consolidated %}<span class="status-{{ load.consolidated|truncatewords:1|cut:' ' }}">{{ load.consolidated }}</span>{% endif %}
+            </div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="revised_eta">
+            <div class="cell-inner">{{ load.revised_eta }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="comment" style="max-width:200px">
+            <div class="cell-inner" style="max-width:200px">{{ load.comment }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="pre_checked_load" style="background:#1a1a08">
+            <div class="cell-inner">{{ load.pre_checked_load }}</div>
+          </td>
+          <td class="editable" data-id="{{ load.pk }}" data-field="supervisor_checked" style="background:#1a1a08">
+            <div class="cell-inner">{{ load.supervisor_checked }}</div>
+          </td>
+
+          {% else %}
+          <!-- Read-only cells for non-admins -->
+          <td><div class="cell-inner"><span class="badge badge-{{ load.day }}">{{ load.day }}</span></div></td>
+          <td><div class="cell-inner">{{ load.date|default:'' }}</div></td>
+          <td><div class="cell-inner">{{ load.del_type }}</div></td>
+          <td><div class="cell-inner">{{ load.split_full }}</div></td>
+          <td><div class="cell-inner">{{ load.get_store_display }}</div></td>
+          <td><div class="cell-inner">{{ load.get_store_code }}</div></td>
+          <td><div class="cell-inner">{{ load.final_plt|default:'' }}</div></td>
+          <td><div class="cell-inner">{{ load.bay }}</div></td>
+          <td><div class="cell-inner">{{ load.time_arrive|default:'' }}</div></td>
+          <td><div class="cell-inner">{{ load.departure_time|default:'' }}</div></td>
+          <td><div class="cell-inner">{{ load.time_departed|default:'' }}</div></td>
+          <td><div class="cell-inner">{{ load.get_driver_display }}</div></td>
+          <td><div class="cell-inner">{{ load.get_company_display }}</div></td>
+          <td><div class="cell-inner">{{ load.schedule_eta }}</div></td>
+          <td><div class="cell-inner">{{ load.date_departed|default:'' }}</div></td>
+          <td><div class="cell-inner">{{ load.trailer_no }}</div></td>
+          <td><div class="cell-inner">{% if load.consolidated %}<span class="status-{{ load.consolidated|truncatewords:1|cut:' ' }}">{{ load.consolidated }}</span>{% endif %}</div></td>
+          <td><div class="cell-inner">{{ load.revised_eta }}</div></td>
+          <td><div class="cell-inner">{{ load.comment }}</div></td>
+          <td style="background:#1a1a08"><div class="cell-inner">{{ load.pre_checked_load }}</div></td>
+          <td style="background:#1a1a08"><div class="cell-inner">{{ load.supervisor_checked }}</div></td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="22"><div class="empty"><p>No loads found</p><small>Try adjusting the filters or add a new load.</small></div></td></tr>
+        {% endfor %}
+      </tbody>
+  </table>
+</div>
+
+<div id="toast"></div>
+
+<!-- RIGHT-CLICK CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-title">Flag row</div>
+  <div class="ctx-colors">
+    <div class="ctx-color" style="background:#7f1d1d" data-color="red" title="Red" onclick="applyFlag('red')"></div>
+    <div class="ctx-color" style="background:#14532d" data-color="green" title="Green" onclick="applyFlag('green')"></div>
+    <div class="ctx-color" style="background:#1e3a5f" data-color="blue" title="Blue" onclick="applyFlag('blue')"></div>
+    <div class="ctx-color" style="background:#713f12" data-color="yellow" title="Yellow" onclick="applyFlag('yellow')"></div>
+    <div class="ctx-color" style="background:#164e63" data-color="lightblue" title="Light Blue" onclick="applyFlag('lightblue')"></div>
+    <div class="ctx-color" style="background:#14532d;opacity:0.6" data-color="lightgreen" title="Light Green" onclick="applyFlag('lightgreen')"></div>
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="applyFlag('')">✕ &nbsp;Clear flag</div>
+  {% if is_admin %}
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" onclick="ctxDelete()">Delete row</div>
+  {% endif %}
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="modal-backdrop" id="import-modal">
+  <div class="modal">
+    <h3>Import from CSV / Excel</h3>
+    <p>The columns are matched automatically by header name. Unrecognised columns are ignored. All fields are optional.</p>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(this.files[0])">
+      <div id="drop-label">📂 &nbsp;Click to choose or drag a file here<br><small style="font-size:11px;margin-top:6px;display:block">CSV, XLSX or XLS</small></div>
+    </div>
+    <div class="import-result" id="import-result"></div>
+    <div class="modal-footer">
+      <button class="btn-sm outline" onclick="closeImport()">Cancel</button>
+      <button class="btn-sm primary" id="btn-do-import" onclick="doImport()" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── THEME TOGGLE ──
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('btn-theme').textContent = isLight ? '🌑' : '🌙';
+  localStorage.setItem('ym-theme', isLight ? 'light' : 'dark');
+}
+// Apply saved theme on load
+if (localStorage.getItem('ym-theme') === 'light') {
+  document.body.classList.add('light');
+  document.getElementById('btn-theme').textContent = '🌑';
+}
+
+const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
+const CSRF = '{{ csrf_token }}';
+let selectedIds = new Set();
+
+// ── INLINE EDITING ──
+document.querySelectorAll('td.editable').forEach(td => {
+  td.addEventListener('dblclick', () => startEdit(td));
+});
+
+function startEdit(td) {
+  if (td.querySelector('.cell-input')) return;
+  const field = td.dataset.field;
+  const type = td.dataset.type || 'text';
+  const currentVal = td.querySelector('.cell-inner').textContent.trim();
+
+  td.classList.add('editing');
+  let input;
+
+  if (type === 'fk-select') {
+    input = document.createElement('select');
+    input.className = 'cell-input';
+    const fkKey = td.dataset.fk;
+    const currentId = td.dataset.currentId || '';
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = ''; emptyOpt.textContent = '— none —';
+    if (!currentId) emptyOpt.selected = true;
+    input.appendChild(emptyOpt);
+    (FK_OPTIONS[fkKey] || []).forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.name + (item.store_code ? ` (${item.store_code})` : '');
+      if (String(item.id) === String(currentId)) opt.selected = true;
+      input.appendChild(opt);
+    });
+  } else if (type === 'select') {
+    input = document.createElement('select');
+    input.className = 'cell-input';
+    const choices = td.dataset.choices.split(',');
+    choices.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c || '—';
+      if (c === currentVal) opt.selected = true;
+      input.appendChild(opt);
+    });
+  } else {
+    input = document.createElement('input');
+    input.className = 'cell-input';
+    input.type = type === 'number' ? 'number' : type === 'date' ? 'date' : type === 'time' ? 'time' : 'text';
+    input.value = type === 'date' ? toISODate(currentVal) : currentVal;
+  }
+
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+
+  if (type === 'fk-select') {
+    input.addEventListener('change', () => commitEdit(td, input.value));
+    input.addEventListener('blur', () => { setTimeout(() => { td.classList.remove('editing'); const inp = td.querySelector('.cell-input'); if (inp) inp.remove(); }, 150); });
+  } else {
+    input.addEventListener('blur', () => commitEdit(td, input.value));
+  }
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { cancelEdit(td); }
+    if (e.key === 'Tab') { e.preventDefault(); input.blur(); }
+  });
+}
+
+function toISODate(str) {
+  if (!str) return '';
+  const parts = str.split('/');
+  if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+  return str;
+}
+
+function cancelEdit(td) {
+  td.classList.remove('editing');
+  const inp = td.querySelector('.cell-input');
+  if (inp) inp.remove();
+}
+
+async function commitEdit(td, value) {
+  td.classList.remove('editing');
+  const inp = td.querySelector('.cell-input');
+  if (inp) inp.remove();
+
+  const id    = td.dataset.id;
+  const field = td.dataset.field;
+  const type  = td.dataset.type || 'text';
+  const inner = td.querySelector('.cell-inner');
+  const oldVal = td.dataset.currentId || inner.textContent.trim();
+
+  if (String(value) === String(oldVal)) return;
+
+  try {
+    const res = await fetch('/api/update-cell/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({id, field, value}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (type === 'fk-select') {
+        inner.textContent = data.display || '';
+        td.dataset.currentId = value;
+        td.dataset.currentLabel = data.display || '';
+      } else if (field === 'day') {
+        inner.innerHTML = `<span class="badge badge-${value}">${value}</span>`;
+      } else if (field === 'consolidated') {
+        const cls = value ? value.split(' ')[0] : '';
+        inner.innerHTML = value ? `<span class="status-${cls}">${value}</span>` : '';
+        // Update row background based on consolidated
+        const row = td.closest('tr');
+        row.className = row.className.replace(/status-row-\S+/g, '').trim();
+        if (!row.className.includes('flag-') && value) {
+          row.classList.add('status-row-' + value.replace(/\s/g, ''));
+        }
+      } else if (field === 'status') {
+        const cls = value.split(' ')[0];
+        inner.innerHTML = `<span class="status-${cls}">${value}</span>`;
+        // Update row background
+        const row = td.closest('tr');
+        row.className = row.className.replace(/status-row-\S+/g, '').trim();
+        if (!row.className.includes('flag-')) {
+          row.classList.add('status-row-' + value.replace(/\s/g, ''));
+        }
+      } else {
+        inner.textContent = value;
+      }
+      showToast('Saved ✓');
+    } else {
+      showToast(data.error || 'Error saving', true);
+    }
+  } catch {
+    showToast('Network error', true);
+  }
+}
+
+// FK options injected from Django context
+const FK_OPTIONS = {
+  stores:    {{ stores_json|safe }},
+  drivers:   {{ drivers_json|safe }},
+  companies: {{ companies_json|safe }},
+};
+// ── FILTERS ──
+function applyFilters() {
+  const params = new URLSearchParams();
+  const d = document.getElementById('f-date').value;
+  const day = document.getElementById('f-day').value;
+  const status = document.getElementById('f-status').value;
+  const search = document.getElementById('f-search').value;
+  if (d) params.set('date', d);
+  if (day) params.set('day', day);
+  if (status) params.set('status', status);
+  if (search) params.set('search', search);
+  window.location.search = params.toString();
+}
+
+function clearFilters() { window.location.search = ''; }
+
+document.getElementById('f-search').addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+
+// ── SELECTION ──
+function toggleAll(checked) {
+  document.querySelectorAll('.row-chk').forEach(c => {
+    c.checked = checked;
+    const id = parseInt(c.closest('tr').dataset.id);
+    if (checked) { selectedIds.add(id); c.closest('tr').classList.add('row-selected'); }
+    else { selectedIds.delete(id); c.closest('tr').classList.remove('row-selected'); }
+  });
+  updateDeleteBtn();
+}
+
+function toggleRowCheck(id, checked) {
+  if (checked) { selectedIds.add(id); document.getElementById(`row-${id}`).classList.add('row-selected'); }
+  else { selectedIds.delete(id); document.getElementById(`row-${id}`).classList.remove('row-selected'); }
+  updateDeleteBtn();
+}
+
+function updateDeleteBtn() {
+  const btn = document.getElementById('btn-delete');
+  if (btn) { btn.disabled = selectedIds.size === 0; btn.textContent = selectedIds.size ? `✕ Delete (${selectedIds.size})` : '✕ Delete'; }
+}
+
+// ── QUICK SEARCH (client-side row filter) ──
+function quickSearch(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#grid tbody tr').forEach(tr => {
+    tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+// ── ADD ROW ──
+async function addRow() {
+  const dateVal = document.getElementById('f-date').value || new Date().toISOString().split('T')[0];
+  const res = await fetch('/api/add-load/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify({date: dateVal}),
+  });
+  const data = await res.json();
+  if (data.id) { showToast('Row added — page reloading…'); setTimeout(() => location.reload(), 800); }
+}
+
+// ── DELETE ──
+async function deleteSelected() {
+  if (!selectedIds.size) return;
+  if (!confirm(`Delete ${selectedIds.size} row(s)? This cannot be undone.`)) return;
+  const res = await fetch('/api/delete-load/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify({ids: [...selectedIds]}),
+  });
+  const data = await res.json();
+  if (data.ok) { showToast('Deleted ✓'); setTimeout(() => location.reload(), 600); }
+}
+
+// ── EXPORT ──
+function exportCSV() {
+  const date = document.getElementById('f-date').value;
+  window.location = `/export/?date=${date}`;
+}
+
+// ── TOAST ──
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = '', 2200);
+}
+
+// ── CONTEXT MENU ──
+let ctxRowId = null;
+function openCtxMenu(e, rowId, currentColor) {
+  e.preventDefault();
+  ctxRowId = rowId;
+  const menu = document.getElementById('ctx-menu');
+  document.querySelectorAll('.ctx-color').forEach(el => {
+    el.classList.toggle('active', el.dataset.color === currentColor);
+  });
+  menu.style.display = 'block';
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 240) + 'px';
+}
+document.addEventListener('click', () => document.getElementById('ctx-menu').style.display = 'none');
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('ctx-menu').style.display = 'none'; });
+
+async function applyFlag(color) {
+  document.getElementById('ctx-menu').style.display = 'none';
+  if (!ctxRowId) return;
+  const res = await fetch('/api/update-flag/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify({id: ctxRowId, color}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const row = document.getElementById(`row-${ctxRowId}`);
+    row.className = row.className.replace(/flag-\w+/g, '').trim();
+    if (color) row.classList.add(`flag-${color}`);
+    // update oncontextmenu attr
+    row.setAttribute('oncontextmenu', `openCtxMenu(event, ${ctxRowId}, '${color}')`);
+    showToast(color ? `Flag: ${color}` : 'Flag cleared');
+  } else {
+    showToast(data.error || 'Error', true);
+  }
+}
+
+function ctxDelete() {
+  document.getElementById('ctx-menu').style.display = 'none';
+  if (!ctxRowId) return;
+  selectedIds.clear();
+  selectedIds.add(ctxRowId);
+  deleteSelected();
+}
+
+// ── IMPORT MODAL ──
+let importFile = null;
+function openImport() { document.getElementById('import-modal').classList.add('open'); }
+function closeImport() {
+  document.getElementById('import-modal').classList.remove('open');
+  importFile = null;
+  document.getElementById('btn-do-import').disabled = true;
+  document.getElementById('drop-label').innerHTML = '📂 &nbsp;Click to choose or drag a file here<br><small style="font-size:11px;margin-top:6px;display:block">CSV, XLSX or XLS</small>';
+  document.getElementById('import-result').style.display = 'none';
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  importFile = file;
+  document.getElementById('drop-label').innerHTML = `✅ &nbsp;<strong>${file.name}</strong><br><small style="font-size:11px;margin-top:4px;display:block">${(file.size/1024).toFixed(1)} KB</small>`;
+  document.getElementById('btn-do-import').disabled = false;
+  document.getElementById('import-result').style.display = 'none';
+}
+
+// Drag & drop
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  handleFileSelect(e.dataTransfer.files[0]);
+});
+
+async function doImport() {
+  if (!importFile) return;
+  const btn = document.getElementById('btn-do-import');
+  btn.disabled = true; btn.textContent = 'Importing…';
+
+  const fd = new FormData();
+  fd.append('file', importFile);
+
+  const res = await fetch('/api/import/', {
+    method: 'POST',
+    headers: {'X-CSRFToken': CSRF},
+    body: fd,
+  });
+  const data = await res.json();
+  const el = document.getElementById('import-result');
+  el.style.display = 'block';
+
+  if (data.ok) {
+    let msg = `✅ ${data.created} rows imported.`;
+    if (data.skipped) msg += ` ${data.skipped} skipped.`;
+    if (data.unmapped_columns?.length) {
+      msg += `<div class="unmapped-list">⚠ Unrecognised columns (ignored): ${data.unmapped_columns.join(', ')}</div>`;
+    }
+    el.className = 'import-result ok';
+    el.innerHTML = msg;
+    btn.textContent = 'Done — reload';
+    btn.disabled = false;
+    btn.onclick = () => location.reload();
+  } else {
+    el.className = 'import-result err';
+    el.textContent = data.error || 'Import failed';
+    btn.textContent = 'Import';
+    btn.disabled = false;
+    btn.onclick = doImport;
+  }
+}
+</script>
+</body>
+</html>

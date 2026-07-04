@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Companies — YardMaster{% endblock %}
+{% block nav_companies %}active{% endblock %}
+
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Companies</div>
+      <div class="page-sub">{{ companies.count }} compan{{ companies.count|pluralize:"y,ies" }} registered</div>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">+ Add Company</button>
+  </div>
+
+  <div class="card">
+    <table class="card-table">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)"></th>
+          <th>#</th>
+          <th>Company Name</th>
+          <th>Status</th>
+          <th>Loads</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in companies %}
+        <tr id="row-{{ c.pk }}">
+          <td><input type="checkbox" class="row-chk" onchange="toggleCheck({{ c.pk }}, this.checked)"></td>
+          <td class="code">{{ forloop.counter }}</td>
+          <td><strong>{{ c.name }}</strong></td>
+          <td>{% if c.active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}</td>
+          <td class="code">{{ c.loads.count }}</td>
+          <td style="text-align:right;display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn btn-outline btn-sm" onclick="openModal({{ c.pk }}, '{{ c.name|escapejs }}', {{ c.active|yesno:'true,false' }})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSingle({{ c.pk }})">Delete</button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">No companies yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if companies %}
+  <div style="margin-top:12px">
+    <button class="btn btn-danger" id="btn-bulk-del" onclick="deleteSelected()" disabled>Delete Selected</button>
+  </div>
+  {% endif %}
+</div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Add Company</div>
+    <input type="hidden" id="edit-id">
+    <div class="form-group">
+      <label class="form-label">Company Name *</label>
+      <input class="form-input" id="f-name" placeholder="e.g. PS Transport">
+    </div>
+    <div class="form-group">
+      <label class="form-check"><input type="checkbox" id="f-active" checked> Active</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCompany()">Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selected = new Set();
+function toggleAll(ch) { document.querySelectorAll('.row-chk').forEach(x => { x.checked = ch; ch ? selected.add(parseInt(x.closest('tr').id.replace('row-',''))) : selected.delete(parseInt(x.closest('tr').id.replace('row-',''))); }); updateBulk(); }
+function toggleCheck(id, ch) { ch ? selected.add(id) : selected.delete(id); updateBulk(); }
+function updateBulk() { const b = document.getElementById('btn-bulk-del'); if(b){ b.disabled=!selected.size; b.textContent=selected.size?`Delete (${selected.size})`:'Delete Selected'; } }
+function openModal(id='', name='', active=true) {
+  document.getElementById('edit-id').value = id;
+  document.getElementById('f-name').value  = name;
+  document.getElementById('f-active').checked = active;
+  document.getElementById('modal-title').textContent = id ? 'Edit Company' : 'Add Company';
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('f-name').focus();
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+async function saveCompany() {
+  const id = document.getElementById('edit-id').value;
+  const name = document.getElementById('f-name').value.trim();
+  const active = document.getElementById('f-active').checked;
+  if (!name) { showToast('Name is required', true); return; }
+  const res = await fetch('/api/company/save/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body: JSON.stringify({id:id||null, name, active}) });
+  const data = await res.json();
+  if (data.ok) { showToast(id?'Saved ✓':'Company added ✓'); setTimeout(()=>location.reload(),600); }
+  else showToast(data.error||'Error', true);
+}
+async function deleteSingle(id) {
+  if (!confirm('Delete this company?')) return;
+  const res = await fetch('/api/company/delete/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body: JSON.stringify({ids:[id]}) });
+  const data = await res.json();
+  if (data.ok) { showToast('Deleted ✓'); setTimeout(()=>location.reload(),600); }
+}
+async function deleteSelected() {
+  if (!selected.size || !confirm(`Delete ${selected.size} compan${selected.size>1?'ies':'y'}?`)) return;
+  const res = await fetch('/api/company/delete/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body: JSON.stringify({ids:[...selected]}) });
+  const data = await res.json();
+  if (data.ok) { showToast('Deleted ✓'); setTimeout(()=>location.reload(),600); }
+}
+document.getElementById('modal').addEventListener('click', e => { if(e.target===document.getElementById('modal')) closeModal(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); if(e.key==='Enter'&&document.getElementById('modal').classList.contains('open')) saveCompany(); });
+</script>
+{% endblock %}

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Stores — YardMaster{% endblock %}
+{% block nav_stores %}active{% endblock %}
+
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Stores</div>
+      <div class="page-sub">{{ stores.count }} store{{ stores.count|pluralize }} registered</div>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">+ Add Store</button>
+  </div>
+
+  <div class="card">
+    <table class="card-table" id="tbl">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)"></th>
+          <th>#</th>
+          <th>Store Name</th>
+          <th>Store Code</th>
+          <th>Status</th>
+          <th>Loads</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in stores %}
+        <tr id="row-{{ s.pk }}">
+          <td><input type="checkbox" class="row-chk" onchange="toggleCheck({{ s.pk }}, this.checked)"></td>
+          <td class="code">{{ forloop.counter }}</td>
+          <td><strong>{{ s.name }}</strong></td>
+          <td class="code">{{ s.store_code|default:"—" }}</td>
+          <td>{% if s.active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}</td>
+          <td class="code">{{ s.loads.count }}</td>
+          <td style="text-align:right;display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn btn-outline btn-sm" onclick="openModal({{ s.pk }}, '{{ s.name|escapejs }}', '{{ s.store_code|escapejs }}', {{ s.active|yesno:'true,false' }})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSingle({{ s.pk }})">Delete</button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">No stores yet — add one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if stores %}
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button class="btn btn-danger" id="btn-bulk-del" onclick="deleteSelected()" disabled>Delete Selected</button>
+  </div>
+  {% endif %}
+</div>
+
+<!-- MODAL -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Add Store</div>
+    <input type="hidden" id="edit-id">
+    <div class="form-group">
+      <label class="form-label">Store Name *</label>
+      <input class="form-input" id="f-name" placeholder="e.g. Galway - Westside">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Store Code</label>
+      <input class="form-input" id="f-code" placeholder="e.g. 511">
+    </div>
+    <div class="form-group">
+      <label class="form-check">
+        <input type="checkbox" id="f-active" checked>
+        Active (appears in dropdowns)
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStore()">Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selected = new Set();
+
+function toggleAll(checked) {
+  document.querySelectorAll('.row-chk').forEach(c => {
+    c.checked = checked;
+    const id = parseInt(c.closest('tr').id.replace('row-',''));
+    checked ? selected.add(id) : selected.delete(id);
+  });
+  updateBulk();
+}
+function toggleCheck(id, checked) {
+  checked ? selected.add(id) : selected.delete(id);
+  updateBulk();
+}
+function updateBulk() {
+  const btn = document.getElementById('btn-bulk-del');
+  if (btn) { btn.disabled = selected.size === 0; btn.textContent = selected.size ? `Delete (${selected.size})` : 'Delete Selected'; }
+}
+
+function openModal(id='', name='', code='', active=true) {
+  document.getElementById('edit-id').value   = id;
+  document.getElementById('f-name').value    = name;
+  document.getElementById('f-code').value    = code;
+  document.getElementById('f-active').checked = active;
+  document.getElementById('modal-title').textContent = id ? 'Edit Store' : 'Add Store';
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('f-name').focus();
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+async function saveStore() {
+  const id     = document.getElementById('edit-id').value;
+  const name   = document.getElementById('f-name').value.trim();
+  const code   = document.getElementById('f-code').value.trim();
+  const active = document.getElementById('f-active').checked;
+  if (!name) { showToast('Name is required', true); return; }
+  const res  = await fetch('/api/store/save/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body: JSON.stringify({id: id||null, name, store_code: code, active}) });
+  const data = await res.json();
+  if (data.ok) { showToast(id ? 'Saved ✓' : 'Store added ✓'); setTimeout(() => location.reload(), 600); }
+  else showToast(data.error || 'Error', true);
+}
+
+async function deleteSingle(id) {
+  if (!confirm('Delete this store?')) return;
+  const res = await fetch('/api/store/delete/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body: JSON.stringify({ids:[id]}) });
+  const data = await res.json();
+  if (data.ok) { showToast('Deleted ✓'); setTimeout(() => location.reload(), 600); }
+}
+async function deleteSelected() {
+  if (!selected.size || !confirm(`Delete ${selected.size} store(s)?`)) return;
+  const res = await fetch('/api/store/delete/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body: JSON.stringify({ids:[...selected]}) });
+  const data = await res.json();
+  if (data.ok) { showToast('Deleted ✓'); setTimeout(() => location.reload(), 600); }
+}
+
+document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); if (e.key === 'Enter' && document.getElementById('modal').classList.contains('open')) saveStore(); });
+</script>
+{% endblock %}

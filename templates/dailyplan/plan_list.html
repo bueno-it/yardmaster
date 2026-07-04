@@ -1,0 +1,720 @@
+{% extends "base.html" %}
+{% block title %}Daily Load Plan — YardMaster{% endblock %}
+{% block nav_daily %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+body { overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+
+/* ── TOP BAR ── */
+.top-bar {
+  display: flex; align-items: center;
+  padding: 0 20px; height: 52px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; gap: 0;
+}
+.stat-pills { display: flex; align-items: center; gap: 6px; flex: 1; }
+.stat-pill {
+  display: flex; align-items: center; gap: 8px; padding: 5px 14px;
+  border-radius: 7px; background: var(--surface3); border: 1px solid var(--border2);
+  white-space: nowrap; flex: 1; justify-content: center;
+}
+.pill-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); font-family: var(--mono); }
+.pill-val   { font-size: 18px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+.bar-sep    { width: 1px; background: var(--border); height: 30px; margin: 0 16px; flex-shrink: 0; }
+.filter-inline { display: flex; align-items: center; gap: 8px; }
+.fi-label  { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+.fi-input, .fi-select {
+  height: 27px; padding: 0 8px; background: var(--bg);
+  border: 1px solid var(--border2); border-radius: 5px;
+  color: var(--text); font-size: 11px; font-family: var(--sans); outline: none;
+}
+.fi-input { width: 114px; }
+.fi-input.wide { width: 180px; }
+.fi-input:focus, .fi-select:focus { border-color: var(--accent); }
+.fi-btn { height: 27px; padding: 0 12px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; font-family: var(--sans); transition: all 0.15s; }
+.fi-btn-apply { background: var(--accent); color: #000; }
+.fi-btn-clear { background: transparent; color: var(--muted2); border: 1px solid var(--border2); }
+
+/* ── TOOLBAR ── */
+.tbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 20px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; background: var(--surface);
+}
+.tbar-info { font-size: 11px; color: var(--muted2); font-family: var(--mono); }
+.tbar-info strong { color: var(--accent); }
+.tbar-sep { flex: 1; }
+.tbar-search { padding: 4px 9px; background: var(--bg); border: 1px solid var(--border2); border-radius: 5px; color: var(--text); font-size: 11px; width: 200px; outline: none; }
+.tbar-search:focus { border-color: var(--accent); }
+.tbar-btn { height: 26px; padding: 0 10px; border-radius: 5px; font-size: 11px; cursor: pointer; border: none; font-family: var(--sans); transition: all 0.15s; }
+.tbar-btn-primary { background: var(--accent); color: #000; font-weight: 600; }
+.tbar-btn-import  { background: transparent; color: var(--info); border: 1px solid rgba(77,159,255,0.3); }
+.tbar-btn-picking { background: transparent; color: var(--warn); border: 1px solid rgba(255,179,64,0.3); }
+.tbar-btn-export  { background: transparent; color: var(--purple); border: 1px solid rgba(157,125,255,0.3); }
+
+/* ── TABLE ── */
+.table-wrap { flex: 1; overflow: auto; }
+table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+
+thead th {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 7px 10px; white-space: nowrap; font-weight: 600;
+  color: var(--muted2); text-align: left;
+  font-family: var(--mono); font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: 0.4px; min-width: 80px;
+}
+thead th:first-child { position: sticky; left: 0; z-index: 21; min-width: 110px; }
+thead th:nth-child(4) { min-width: 180px; }
+
+tbody tr { border-bottom: 1px solid var(--border); }
+tbody tr:hover td { filter: brightness(1.15); }
+
+tbody td { border-right: 1px solid var(--border); padding: 0; white-space: nowrap; background: var(--bg); position: relative; }
+tbody td:first-child { position: sticky; left: 0; z-index: 5; background: inherit; }
+
+.cell { padding: 5px 10px; min-height: 30px; display: flex; align-items: center; font-size: 12px; }
+td.editable .cell { cursor: cell; }
+td.editable:hover .cell { opacity: 0.85; }
+td.editing .cell { display: none; }
+td input.cell-input, td select.cell-input {
+  position: absolute; inset: 0; background: #0a1a0a;
+  border: 2px solid var(--accent); padding: 4px 8px;
+  font-size: 12px; font-family: inherit; color: #fff !important; z-index: 10; width: 100%;
+}
+td select.cell-input option { background: #1a2a1a; color: #fff !important; }
+body.light td input.cell-input, body.light td select.cell-input {
+  background: #fff; color: #000 !important;
+}
+body.light td select.cell-input option { background: #fff; color: #000 !important; }
+
+/* ── ROW COLORS BY PROGRESS ── */
+
+/* Manual flag = red alert (overrides all) */
+tr.row-flag td        { background: #c0392b !important; color: #fff !important; border-bottom: 1px solid #e74c3c !important; }
+tr.row-flag:hover td  { background: #e74c3c !important; }
+tr.row-flag td :not(input):not(select):not(option) { color: #fff !important; }
+
+/* Rigid = orange (always, ignores progress) */
+tr.row-rigid td        { background: #3b1f6e !important; color: #fff !important; border-bottom: 1px solid #5b35a0 !important; }
+tr.row-rigid:hover td  { background: #4a2888 !important; }
+tr.row-rigid td :not(input):not(select):not(option) { color: #fff !important; }
+
+/* < 30% = light grey/white in dark mode */
+tr.row-low td          { background: #1e2535 !important; color: #cbd5e1 !important; border-bottom: 1px solid #2a3448 !important; }
+tr.row-low:hover td    { background: #252e42 !important; }
+tr.row-low td *        { color: #cbd5e1 !important; }
+
+/* 31-60% = amber/yellow */
+tr.row-mid td          { background: #5c4200 !important; color: #fff !important; border-bottom: 1px solid #7a5800 !important; }
+tr.row-mid:hover td    { background: #705000 !important; }
+tr.row-mid td *        { color: #fff !important; }
+
+/* 61-100% = green (same for complete) */
+tr.row-high td         { background: #0a4a25 !important; color: #fff !important; border-bottom: 1px solid #0f6030 !important; }
+tr.row-high:hover td   { background: #0d5a2e !important; }
+tr.row-high td *       { color: #fff !important; }
+
+tr.row-complete td     { background: #0a4a25 !important; color: #fff !important; border-bottom: 1px solid #0f6030 !important; }
+tr.row-complete:hover td { background: #0d5a2e !important; }
+tr.row-complete td *   { color: #fff !important; }
+
+/* LIGHT MODE - vivid solid colors, always black text */
+body.light tr.row-flag td        { background: #e74c3c !important; color: #000 !important; border-bottom: 1px solid #c0392b !important; }
+body.light tr.row-flag td :not(input):not(select):not(option) { color: #000 !important; }
+body.light tr.row-rigid td       { background: #ddd6fe !important; color: #000 !important; border-bottom: 1px solid #a78bfa !important; }
+body.light tr.row-rigid td *     { color: #000 !important; }
+body.light tr.row-low td         { background: #f0f0f0 !important; color: #000 !important; border-bottom: 1px solid #d0d0d0 !important; }
+body.light tr.row-low td *       { color: #000 !important; }
+body.light tr.row-mid td         { background: #ffe066 !important; color: #000 !important; border-bottom: 1px solid #e0c020 !important; }
+body.light tr.row-mid td *       { color: #000 !important; }
+body.light tr.row-high td        { background: #80e6a0 !important; color: #000 !important; border-bottom: 1px solid #50c070 !important; }
+body.light tr.row-high td :not(input):not(select):not(option) { color: #000 !important; }
+body.light tr.row-complete td    { background: #80e6a0 !important; color: #000 !important; border-bottom: 1px solid #50c070 !important; }
+body.light tr.row-complete td *  { color: #000 !important; }
+
+/* Context menu */
+#dp-ctx-menu {
+  position: fixed; z-index: 9000; background: var(--surface2);
+  border: 1px solid var(--border2); border-radius: 8px;
+  padding: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  display: none; min-width: 160px;
+}
+#dp-ctx-menu.visible { display: block; animation: ctxIn 0.12s ease; }
+@keyframes ctxIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+.ctx-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); padding: 4px 10px 8px; font-family: var(--mono); }
+.ctx-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text); transition: background 0.1s; }
+.ctx-item:hover { background: var(--surface3); }
+.ctx-item.danger { color: var(--danger); }
+.ctx-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── PROGRESS BAR ── */
+.prog-wrap { display: flex; align-items: center; gap: 6px; padding: 4px 10px; min-height: 30px; }
+.prog-bar-bg { flex: 1; height: 6px; border-radius: 3px; background: rgba(0,0,0,0.3); overflow: hidden; min-width: 70px; }
+.prog-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+.prog-pct { font-size: 10px; font-family: var(--mono); min-width: 34px; text-align: right; font-weight: 600; }
+
+/* ── BADGE ── */
+.badge { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-family: var(--mono); }
+.badge-HB  { background: rgba(157,125,255,0.2); color: var(--purple); border: 1px solid rgba(157,125,255,0.3); }
+.badge-BD  { background: rgba(77,159,255,0.2);  color: var(--info);   border: 1px solid rgba(77,159,255,0.3); }
+.badge-MID { background: rgba(255,179,64,0.2);  color: var(--warn);   border: 1px solid rgba(255,179,64,0.3); }
+
+.open-badge   { font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-family: var(--mono); background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.25); }
+.closed-badge { font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-family: var(--mono); background: rgba(255,77,109,0.1); color: var(--danger); border: 1px solid rgba(255,77,109,0.2); }
+
+/* ── MODAL ── */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 8000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--surface2); border: 1px solid var(--border2); border-radius: 14px; padding: 28px; width: 480px; max-width: 95vw; box-shadow: 0 24px 64px rgba(0,0,0,0.7); }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.modal p  { font-size: 12px; color: var(--muted2); margin-bottom: 20px; }
+.drop-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 28px 20px; text-align: center; cursor: pointer; color: var(--muted2); font-size: 13px; transition: all 0.2s; }
+.drop-zone:hover { border-color: var(--accent); background: rgba(0,229,160,0.04); color: var(--accent); }
+.drop-zone input { display: none; }
+.import-result { margin-top: 14px; font-size: 12px; display: none; padding: 10px 14px; border-radius: 8px; }
+.import-result.ok  { background: rgba(0,229,160,0.1); color: var(--accent); }
+.import-result.err { background: rgba(255,77,109,0.1); color: var(--danger); }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.mbtn { padding: 8px 18px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; font-family: var(--sans); }
+.mbtn-primary { background: var(--accent); color: #000; }
+.mbtn-warn    { background: var(--warn); color: #000; }
+.mbtn-ghost   { background: transparent; color: var(--muted2); border: 1px solid var(--border2); }
+
+.empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.btn-theme { width: 30px; height: 30px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border2); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.btn-theme:hover { border-color: var(--accent); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- STATS + FILTERS -->
+<div class="top-bar">
+  <div class="stat-pills">
+    <div class="stat-pill">
+      <span class="pill-label">Stores</span>
+      <span class="pill-val" style="color:var(--info)">{{ total_stores }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Ordered</span>
+      <span class="pill-val">{{ total_ordered }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Remaining</span>
+      <span class="pill-val" style="color:var(--warn)">{{ total_remaining }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Picked</span>
+      <span class="pill-val" style="color:var(--accent)">{{ total_picked }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Carryover</span>
+      <span class="pill-val" style="color:var(--purple)">{{ total_carryover }}</span>
+    </div>
+    <div class="stat-pill">
+      <span class="pill-label">Complete</span>
+      <span class="pill-val" style="color:var(--accent)">{{ complete_count }}</span>
+    </div>
+    <div class="stat-pill" style="border-color:rgba(255,179,64,0.4);background:rgba(255,179,64,0.08)">
+      <span class="pill-label" style="color:var(--warn)">Week Total</span>
+      <span class="pill-val" style="color:var(--warn)">{{ week_ordered }}</span>
+    </div>
+  </div>
+  <div class="bar-sep"></div>
+  <div class="filter-inline">
+    <span class="fi-label">Date</span>
+    <input class="fi-input" type="date" id="f-date" value="{{ date_filter }}">
+    <input class="fi-input wide" type="text" id="f-search" placeholder="Store, company…" value="{{ search }}">
+    <button class="fi-btn fi-btn-apply" onclick="applyFilters()">Apply</button>
+    <button class="fi-btn fi-btn-clear" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="tbar">
+  <div class="tbar-info">Showing <strong>{{ total_stores }}</strong> stores for <strong>{{ date_filter }}</strong></div>
+  <div class="tbar-sep"></div>
+  <input class="tbar-search" type="text" placeholder="🔍 Quick search…" oninput="quickSearch(this.value)">
+  {% if is_admin %}
+  <button class="tbar-btn tbar-btn-import" onclick="openModal('plan')">↑ Import Plan</button>
+  <button class="tbar-btn tbar-btn-picking" onclick="openModal('picking')">↑ Update Picking</button>
+  {% endif %}
+  <button class="tbar-btn tbar-btn-export" onclick="exportPlan()">↓ Export</button>
+  <div id="refresh-wrap" style="position:relative;">
+    <button class="tbar-btn" id="btn-refresh" onclick="toggleRefreshMenu()" style="border-color:var(--border2);color:var(--muted2);">↺ Auto</button>
+    <div id="refresh-menu" style="display:none;position:absolute;right:0;top:32px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px;z-index:100;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+      <div onclick="setRefresh(30)"  style="padding:6px 12px;cursor:pointer;font-size:12px;border-radius:5px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">Every 30s</div>
+      <div onclick="setRefresh(60)"  style="padding:6px 12px;cursor:pointer;font-size:12px;border-radius:5px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">Every 60s</div>
+      <div onclick="setRefresh(120)" style="padding:6px 12px;cursor:pointer;font-size:12px;border-radius:5px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">Every 2min</div>
+      <div onclick="setRefresh(300)" style="padding:6px 12px;cursor:pointer;font-size:12px;border-radius:5px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">Every 5min</div>
+      <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+      <div onclick="setRefresh(0)"   style="padding:6px 12px;cursor:pointer;font-size:12px;border-radius:5px;color:var(--danger);" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">Turn off</div>
+    </div>
+  </div>
+  <button class="btn-theme" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+</div>
+
+<!-- TABLE -->
+<div class="table-wrap">
+  <table id="grid">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>HB/BD</th>
+        <th>ID</th>
+        <th style="min-width:180px">Store</th>        <th>Ordered</th>
+        <th>Remaining</th>
+        <th>Picked</th>
+        <th style="min-width:140px">Progress</th>
+        <th>Doors</th>
+        <th>Open</th>
+        <th>Closed</th>
+        <th style="min-width:140px">Company</th>
+        <th>Window</th>
+        <th style="min-width:160px">Comments</th>
+        <th>Mergers</th>
+        <th>Loaders</th>
+        <th>Check</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in plans %}
+      {% if p.flag_color %}
+        <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="{{ p.progress_pct }}" data-rigid="{% if p.is_rigid %}1{% else %}0{% endif %}" class="row-flag" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '{{ p.flag_color }}')">
+      {% elif p.is_rigid %}
+        <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="{{ p.progress_pct }}" data-rigid="1" class="row-rigid" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '')">
+      {% elif p.is_complete %}
+        <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="100" data-rigid="0" class="row-complete" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '')">
+      {% elif p.progress_pct >= 61 %}
+        <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="{{ p.progress_pct }}" data-rigid="0" class="row-high" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '')">
+      {% elif p.progress_pct >= 31 %}
+        <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="{{ p.progress_pct }}" data-rigid="0" class="row-mid" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '')">
+      {% else %}
+        <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="{{ p.progress_pct }}" data-rigid="0" class="row-low" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '')">
+      {% endif %}
+
+        <!-- Sticky store name -->
+        <td><div class="cell" style="font-family:var(--mono);font-size:11px;color:var(--muted2)">{{ p.date }}</div></td>
+        <td><div class="cell">{% if p.hb_bd %}<span class="badge badge-{{ p.hb_bd }}">{{ p.hb_bd }}</span>{% endif %}</div></td>
+        <td><div class="cell" style="font-family:var(--mono)">{{ p.store_id_raw }}</div></td>
+        <td><div class="cell"><strong>{{ p.store_display }}</strong></div></td>
+
+        {% if is_admin %}
+        <td class="editable" data-id="{{ p.pk }}" data-field="ordered" data-type="number">
+          <div class="cell" style="font-family:var(--mono)">{{ p.ordered }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="remaining" data-type="number">
+          <div class="cell" style="font-family:var(--mono);font-weight:700">{{ p.remaining }}</div>
+        </td>
+        {% else %}
+        <td><div class="cell" style="font-family:var(--mono)">{{ p.ordered }}</div></td>
+        <td><div class="cell" style="font-family:var(--mono);font-weight:700">{{ p.remaining }}</div></td>
+        {% endif %}
+
+        <td><div class="cell" style="font-family:var(--mono);font-weight:700">{{ p.picked }}</div></td>
+
+        <!-- Progress bar -->
+        <td>
+          <div class="prog-wrap" id="prog-{{ p.pk }}">
+            <div class="prog-bar-bg">
+              <div class="prog-bar-fill" style="width:{{ p.progress_pct }}%;background:{% if p.is_complete %}#22c55e{% elif p.progress_pct >= 61 %}#4ade80{% elif p.progress_pct >= 31 %}#fbbf24{% else %}#f87171{% endif %};"></div>
+            </div>
+            <span class="prog-pct">{{ p.progress_pct }}%</span>
+          </div>
+        </td>
+
+        {% if is_admin %}
+        <td class="editable" data-id="{{ p.pk }}" data-field="doors">
+          <div class="cell">{{ p.doors }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="open_status" data-type="select" data-choices=",Open,Closed">
+          <div class="cell">{% if p.open_status %}<span class="{% if p.open_status == 'Open' %}open-badge{% else %}closed-badge{% endif %}">{{ p.open_status }}</span>{% endif %}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="closed_status" data-type="select" data-choices=",Open,Closed">
+          <div class="cell">{% if p.closed_status %}<span class="{% if p.closed_status == 'Open' %}open-badge{% else %}closed-badge{% endif %}">{{ p.closed_status }}</span>{% endif %}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="company">
+          <div class="cell">{{ p.company }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="window">
+          <div class="cell">{{ p.window }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="comments">
+          <div class="cell">{{ p.comments }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="mergers">
+          <div class="cell">{{ p.mergers }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="loaders">
+          <div class="cell">{{ p.loaders }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="check_field">
+          <div class="cell">{{ p.check_field }}</div>
+        </td>
+        {% else %}
+        <td><div class="cell">{{ p.doors }}</div></td>
+        <td><div class="cell">{% if p.open_status %}<span class="{% if p.open_status == 'Open' %}open-badge{% else %}closed-badge{% endif %}">{{ p.open_status }}</span>{% endif %}</div></td>
+        <td><div class="cell">{% if p.closed_status %}<span class="{% if p.closed_status == 'Open' %}open-badge{% else %}closed-badge{% endif %}">{{ p.closed_status }}</span>{% endif %}</div></td>
+        <td><div class="cell">{{ p.company }}</div></td>
+        <td><div class="cell">{{ p.window }}</div></td>
+        <td><div class="cell">{{ p.comments }}</div></td>
+        <td><div class="cell">{{ p.mergers }}</div></td>
+        <td><div class="cell">{{ p.loaders }}</div></td>
+        <td><div class="cell">{{ p.check_field }}</div></td>
+        {% endif %}
+      </tr>
+      {% empty %}
+      <tr><td colspan="17"><div class="empty"><p>No plan found for this date</p><small>Import a Daily Load Plan to get started.</small></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- IMPORT PLAN MODAL -->
+<div class="modal-backdrop" id="modal-plan">
+  <div class="modal">
+    <h3>↑ Import Daily Load Plan</h3>
+    <p>Upload the full plan CSV or Excel. Existing entries for the same date + store ID will be updated.</p>
+    <div class="drop-zone" id="dz-plan" onclick="document.getElementById('fi-plan').click()">
+      <input type="file" id="fi-plan" accept=".csv,.xlsx,.xls" onchange="handleFile('plan', this.files[0])">
+      <div id="dz-plan-label">📂 &nbsp;Click or drag CSV / Excel here</div>
+    </div>
+    <div class="import-result" id="res-plan"></div>
+    <div class="modal-footer">
+      <button class="mbtn mbtn-ghost" onclick="closeModal('plan')">Cancel</button>
+      <button class="mbtn mbtn-primary" id="btn-do-plan" onclick="doImport('plan')" disabled>Import Plan</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPDATE PICKING MODAL -->
+<div class="modal-backdrop" id="modal-picking">
+  <div class="modal">
+    <h3>↑ Update Picking Numbers</h3>
+    <p>Upload the <strong>Pick Remaining By Customer</strong> CSV report. Updates Ordered, Remaining matched by Store ID.</p>
+    <div class="drop-zone" id="dz-picking" onclick="document.getElementById('fi-picking').click()">
+      <input type="file" id="fi-picking" accept=".csv" onchange="handleFile('picking', this.files[0])">
+      <div id="dz-picking-label">📂 &nbsp;Click or drag CSV here</div>
+    </div>
+    <div class="import-result" id="res-picking"></div>
+    <div class="modal-footer">
+      <button class="mbtn mbtn-ghost" onclick="closeModal('picking')">Cancel</button>
+      <button class="mbtn mbtn-warn" id="btn-do-picking" onclick="doImport('picking')" disabled>Update Numbers</button>
+    </div>
+  </div>
+</div>
+
+<div id="dp-ctx-menu">
+  <div class="ctx-title">Mark row</div>
+  <div class="ctx-item" onclick="dpSetFlag('red')">
+    <span class="ctx-dot" style="background:#e74c3c"></span> Red alert
+  </div>
+  <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+  <div class="ctx-item" onclick="dpSetFlag('')">✕ &nbsp;Clear flag</div>
+</div>
+
+<div id="toast" style="position:fixed;bottom:24px;right:24px;background:var(--accent);color:#000;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transform:translateY(8px);transition:all 0.2s;pointer-events:none;z-index:9999;"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const DATE_FILTER = '{{ date_filter }}';
+
+// ── THEME ──
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('btn-theme').textContent = isLight ? '🌑' : '🌙';
+  localStorage.setItem('ym-theme', isLight ? 'light' : 'dark');
+}
+if (localStorage.getItem('ym-theme') === 'light') {
+  document.body.classList.add('light');
+  document.getElementById('btn-theme').textContent = '🌑';
+}
+
+// ── FILTERS ──
+function applyFilters() {
+  const params = new URLSearchParams();
+  const d = document.getElementById('f-date').value;
+  const s = document.getElementById('f-search').value;
+  if (d) params.set('date', d);
+  if (s) params.set('search', s);
+  window.location.search = params.toString();
+}
+function clearFilters() { window.location.search = ''; }
+document.getElementById('f-search').addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+
+function quickSearch(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#grid tbody tr').forEach(tr => {
+    tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function exportPlan() { window.location = `/daily/export/?date=${DATE_FILTER}`; }
+
+// ── INLINE EDIT ──
+document.querySelectorAll('td.editable').forEach(td => {
+  td.addEventListener('dblclick', () => startEdit(td));
+});
+
+function startEdit(td) {
+  if (td.querySelector('.cell-input')) return;
+  const type     = td.dataset.type || 'text';
+  const currentVal = td.querySelector('.cell').textContent.trim();
+  td.classList.add('editing');
+  let input;
+
+  if (type === 'select') {
+    input = document.createElement('select');
+    input.className = 'cell-input';
+    td.dataset.choices.split(',').forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c || '—';
+      if (c === currentVal) opt.selected = true;
+      input.appendChild(opt);
+    });
+    // For select: commit on change, then remove
+    input.addEventListener('change', () => {
+      const val = input.value;
+      td.classList.remove('editing');
+      input.remove();
+      commitEdit(td, val);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { td.classList.remove('editing'); input.remove(); }
+    });
+  } else {
+    input = document.createElement('input');
+    input.className = 'cell-input';
+    input.type = type === 'number' ? 'number' : 'text';
+    input.value = currentVal;
+    input.addEventListener('blur', () => commitEdit(td, input.value));
+  }
+
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { td.classList.remove('editing'); input.remove(); }
+    if (e.key === 'Tab') { e.preventDefault(); input.blur(); }
+  });
+}
+
+async function commitEdit(td, value) {
+  td.classList.remove('editing');
+  const inp = td.querySelector('.cell-input');
+  if (inp) { try { inp.remove(); } catch(e) {} }
+  const id    = td.dataset.id;
+  const field = td.dataset.field;
+  const cell  = td.querySelector('.cell');
+  const oldVal = cell.textContent.trim();
+  if (value === oldVal) return;
+
+  try {
+    const res = await fetch('/daily/api/update-cell/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({id, field, value}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // Update display
+      if (field === 'open_status' || field === 'closed_status') {
+        cell.innerHTML = value ? `<span class="${value === 'Open' ? 'open-badge' : 'closed-badge'}">${value}</span>` : '';
+      } else {
+        cell.textContent = value;
+      }
+      showToast('Saved ✓');
+      if (['ordered','remaining'].includes(field)) {
+        updateRowProgress(id, data);
+      }
+    } else {
+      cell.textContent = oldVal;
+      showToast(data.error || 'Error', true);
+    }
+  } catch(e) {
+    cell.textContent = oldVal;
+    showToast('Network error', true);
+  }
+}
+
+function updateRowProgress(id, data) {
+  const row = document.getElementById(`row-${id}`);
+  if (!row) return;
+  const isRigid = row.dataset.rigid === '1';
+
+  // Update progress bar
+  const fill = row.querySelector('.prog-bar-fill');
+  const pct  = row.querySelector('.prog-pct');
+  if (fill) {
+    fill.style.width = data.progress_pct + '%';
+    fill.style.background = data.is_complete ? '#22c55e' : data.progress_pct >= 61 ? '#4ade80' : data.progress_pct >= 31 ? '#fbbf24' : '#f87171';
+  }
+  if (pct) pct.textContent = data.progress_pct + '%';
+
+  // Update row colour
+  if (!isRigid) {
+    row.className = row.className.replace(/row-\w+/g, '').trim();
+    if (data.is_complete)           row.classList.add('row-complete');
+    else if (data.progress_pct >= 61) row.classList.add('row-high');
+    else if (data.progress_pct >= 31) row.classList.add('row-mid');
+    else                               row.classList.add('row-low');
+  }
+}
+
+// ── MODALS ──
+let importFiles = {};
+function openModal(type) { document.getElementById(`modal-${type}`).classList.add('open'); }
+function closeModal(type) {
+  document.getElementById(`modal-${type}`).classList.remove('open');
+  importFiles[type] = null;
+  document.getElementById(`btn-do-${type}`).disabled = true;
+  document.getElementById(`dz-${type}-label`).innerHTML = '📂 &nbsp;Click or drag here';
+  document.getElementById(`res-${type}`).style.display = 'none';
+}
+
+function handleFile(type, file) {
+  if (!file) return;
+  importFiles[type] = file;
+  document.getElementById(`dz-${type}-label`).innerHTML = `✅ &nbsp;<strong>${file.name}</strong>`;
+  document.getElementById(`btn-do-${type}`).disabled = false;
+}
+
+['plan','picking'].forEach(type => {
+  const dz = document.getElementById(`dz-${type}`);
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--accent)'; });
+  dz.addEventListener('dragleave', () => dz.style.borderColor = '');
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; handleFile(type, e.dataTransfer.files[0]); });
+});
+
+async function doImport(type) {
+  const file = importFiles[type];
+  if (!file) return;
+  const btn = document.getElementById(`btn-do-${type}`);
+  btn.disabled = true; btn.textContent = 'Importing…';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('date', document.getElementById('f-date').value || DATE_FILTER);
+
+  const url  = type === 'plan' ? '/daily/api/import-plan/' : '/daily/api/import-picking/';
+  const res  = await fetch(url, { method:'POST', headers:{'X-CSRFToken': CSRF}, body: fd });
+  const data = await res.json();
+  const el   = document.getElementById(`res-${type}`);
+  el.style.display = 'block';
+
+  if (data.ok) {
+    el.className = 'import-result ok';
+    if (type === 'plan') {
+      let msg = `✅ ${data.created} created, ${data.updated} updated, ${data.skipped} skipped.`;
+      if (data.errors && data.errors.length) {
+        msg += `<br><small style="color:var(--warn)">First error: Row ${data.errors[0].row} — ${data.errors[0].error}</small>`;
+      }
+      el.innerHTML = msg;
+    }
+    else el.textContent = `✅ ${data.updated} stores updated. ${data.not_found} not found in plan.`;
+    btn.textContent = 'Done — reload';
+    btn.disabled = false;
+    btn.onclick = () => location.reload();
+  } else {
+    el.className = 'import-result err';
+    el.textContent = data.error || 'Import failed';
+    btn.textContent = type === 'plan' ? 'Import Plan' : 'Update Numbers';
+    btn.disabled = false;
+  }
+}
+
+// ── AUTO REFRESH ──
+let _ari = null;
+function startAutoRefresh(s) {
+  clearInterval(_ari); _ari = setInterval(() => location.reload(), s * 1000);
+  const btn = document.getElementById('btn-refresh');
+  btn.textContent = `↺ ${s}s`; btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)';
+}
+function stopAutoRefresh() {
+  clearInterval(_ari);
+  const btn = document.getElementById('btn-refresh');
+  btn.textContent = '↺ Auto'; btn.style.borderColor = ''; btn.style.color = '';
+}
+function toggleRefreshMenu() {
+  const m = document.getElementById('refresh-menu');
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+function setRefresh(s) {
+  document.getElementById('refresh-menu').style.display = 'none';
+  if (s === 0) { stopAutoRefresh(); showToast('Auto-refresh off'); }
+  else { startAutoRefresh(s); showToast(`Auto-refresh every ${s}s`); }
+}
+document.addEventListener('click', e => {
+  const m = document.getElementById('refresh-menu');
+  if (m && !e.target.closest('#refresh-wrap')) m.style.display = 'none';
+});
+
+// ── CONTEXT MENU (right-click flag) ──
+let dpCtxId = null;
+function dpCtxMenu(e, id, currentFlag) {
+  e.preventDefault();
+  dpCtxId = id;
+  const m = document.getElementById('dp-ctx-menu');
+  m.classList.add('visible');
+  m.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+  m.style.top  = Math.min(e.clientY, window.innerHeight - 120) + 'px';
+}
+document.addEventListener('click', () => document.getElementById('dp-ctx-menu').classList.remove('visible'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('dp-ctx-menu').classList.remove('visible'); });
+
+async function dpSetFlag(color) {
+  document.getElementById('dp-ctx-menu').classList.remove('visible');
+  if (!dpCtxId) return;
+  try {
+    const res = await fetch('/daily/api/update-flag/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({id: dpCtxId, color}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const row = document.getElementById(`row-${dpCtxId}`);
+      if (row) {
+        const isRigid = row.dataset.rigid === '1';
+        const pct = parseInt(row.dataset.pct || 0);
+        row.className = row.className.replace(/row-\w+/g, '').trim();
+        if (color) {
+          row.classList.add('row-flag');
+        } else if (isRigid) {
+          row.classList.add('row-rigid');
+        } else if (pct === 100) {
+          row.classList.add('row-complete');
+        } else if (pct >= 61) {
+          row.classList.add('row-high');
+        } else if (pct >= 31) {
+          row.classList.add('row-mid');
+        } else {
+          row.classList.add('row-low');
+        }
+      }
+      showToast(color ? '🔴 Flagged' : 'Flag removed');
+    }
+  } catch(e) {
+    showToast('Error', true);
+  }
+}
+
+// ── TOAST ──
+function showToast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1'; t.style.transform = 'translateY(0)';
+  t.style.background = isError ? 'var(--danger)' : 'var(--accent)';
+  t.style.color = isError ? '#fff' : '#000';
+  clearTimeout(t._t); t._t = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; }, 2500);
+}
+</script>
+{% endblock %}

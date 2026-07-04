@@ -1,0 +1,419 @@
+import csv
+import io
+import re
+import json
+from datetime import date, datetime
+
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render, get_object_or_404
+from django.db.models import Q, Sum
+
+from .models import DailyPlan
+from transport.models import Store, Load
+
+
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+
+@login_required
+def plan_list(request):
+    date_filter = request.GET.get('date', str(date.today()))
+    search      = request.GET.get('search', '')
+
+    plans = DailyPlan.objects.select_related('store').filter(date=date_filter).order_by('row_order', 'store_name_raw')
+
+    if search:
+        plans = plans.filter(
+            Q(store__name__icontains=search) |
+            Q(store_name_raw__icontains=search) |
+            Q(store_id_raw__icontains=search) |
+            Q(company__icontains=search)
+        ).order_by('row_order', 'store_name_raw')
+
+    total_ordered    = plans.aggregate(t=Sum('ordered'))['t'] or 0
+    total_remaining  = plans.aggregate(t=Sum('remaining'))['t'] or 0
+    total_picked     = sum(p.picked for p in plans)
+    total_carryover  = total_remaining  # carryover = what's still remaining
+    complete_count   = plans.filter(remaining=0).count()
+
+    # Weekly total (Mon-Sun of selected date)
+    from datetime import timedelta
+    try:
+        selected = datetime.strptime(date_filter, '%Y-%m-%d').date()
+    except:
+        selected = date.today()
+    week_start = selected - timedelta(days=selected.weekday())
+    week_end   = week_start + timedelta(days=6)
+    week_ordered = DailyPlan.objects.filter(
+        date__range=[week_start, week_end]
+    ).aggregate(t=Sum('ordered'))['t'] or 0
+
+    context = {
+        'plans':           plans,
+        'date_filter':     date_filter,
+        'search':          search,
+        'total_ordered':   total_ordered,
+        'total_remaining': total_remaining,
+        'total_carryover': total_carryover,
+        'total_picked':    total_picked,
+        'complete_count':  complete_count,
+        'total_stores':    plans.count(),
+        'week_ordered':    week_ordered,
+        'week_start':      week_start,
+        'week_end':        week_end,
+        'is_admin':        is_admin(request.user),
+    }
+    return render(request, 'dailyplan/plan_list.html', context)
+
+
+@login_required
+def update_flag(request):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data  = json.loads(request.body)
+    plan  = get_object_or_404(DailyPlan, pk=data.get('id'))
+    color = data.get('color', '')
+    plan.flag_color = color
+    plan.save(update_fields=['flag_color', 'updated_at'])
+    return JsonResponse({'ok': True, 'color': color})
+
+
+@login_required
+def update_cell(request):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    data  = json.loads(request.body)
+    plan  = get_object_or_404(DailyPlan, pk=data.get('id'))
+    field = data.get('field')
+    value = str(data.get('value', '')).strip()
+
+    EDITABLE = ['hb_bd', 'doors', 'open_status', 'closed_status', 'company',
+                'window', 'comments', 'mergers', 'loaders', 'check_field',
+                'ordered', 'remaining']
+
+    if field not in EDITABLE:
+        return JsonResponse({'error': 'Not editable'}, status=400)
+
+    if field in ('ordered', 'remaining'):
+        try:
+            value = int(value) if value else 0
+        except ValueError:
+            return JsonResponse({'error': 'Must be a number'}, status=400)
+
+    setattr(plan, field, value)
+    plan.save(update_fields=[field, 'updated_at'])
+    _sync_to_yardmaster(plan)
+
+    return JsonResponse({
+        'ok': True,
+        'picked': plan.picked,
+        'progress_pct': plan.progress_pct,
+        'is_complete': plan.is_complete,
+        'is_rigid': 'rigid' in (plan.company or '').lower(),
+    })
+
+
+def _sync_to_yardmaster(plan):
+    if not plan.store:
+        return
+    loads = Load.objects.filter(store=plan.store, date=plan.date)
+    for load in loads:
+        load.total_picked = plan.picked
+        load.save(update_fields=['total_picked', 'updated_at'])
+
+
+def _parse_date_val(val):
+    if not val:
+        return None
+    if hasattr(val, 'date'):
+        return val.date()
+    if hasattr(val, 'year'):
+        return val
+    val = str(val).strip().split(' ')[0]
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(val, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _to_int(v):
+    try:
+        return int(float(str(v).strip().replace(',', ''))) if v else 0
+    except:
+        return 0
+
+
+# Map normalised header → model field
+PLAN_HEADER_MAP = {
+    'date':              'date',
+    'hb/bd':             'hb_bd',
+    'hb bd':             'hb_bd',
+    'id':                'store_id_raw',
+    'store':             'store_name_raw',
+    'store name':        'store_name_raw',
+    'store id':          'store_id_raw',
+    'ordered':           'ordered',
+    'remaining':         'remaining',
+    'cases':             'ordered',
+    'doors':             'doors',
+    'open':              'open_status',
+    'closed':            'closed_status',
+    'company':           'company',
+    'window':            'window',
+    'comments':          'comments',
+    'comment':           'comments',
+    'mergers':           'mergers',
+    'loaders':           'loaders',
+    'pre load check':    'check_field',
+    'pre-load check':    'check_field',
+    'preload check':     'check_field',
+    'check':             'check_field',
+    'order':             'row_order',
+    'pick carryover':    'pick_carryover',
+    'carryover':         'pick_carryover',
+    'amb pallets':       'pick_carryover',
+    'wrap':              'mergers',
+    'load':              'loaders',
+    'consol':            'check_field',
+}
+
+
+def _read_file_rows(uploaded):
+    """Read CSV or Excel and return list of dicts with string values."""
+    fname = uploaded.name.lower()
+    content = uploaded.read()
+
+    if fname.endswith('.csv'):
+        text = content.decode('utf-8-sig')
+        rows = list(csv.DictReader(io.StringIO(text)))
+        return rows, None
+
+    elif fname.endswith(('.xlsx', '.xls')):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+
+            # Find sheet with most matching headers
+            best_ws    = None
+            best_score = -1
+            for name in wb.sheetnames:
+                ws = wb[name]
+                try:
+                    headers = [str(c.value).strip().lower() if c.value else ''
+                               for c in next(ws.iter_rows(min_row=1, max_row=1))]
+                    score = sum(1 for h in headers if h in PLAN_HEADER_MAP)
+                    if score > best_score:
+                        best_score = score
+                        best_ws    = ws
+                except StopIteration:
+                    continue
+
+            if not best_ws:
+                return None, 'No usable sheet found'
+
+            raw_headers = [str(c.value).strip() if c.value else f'col{i}'
+                           for i, c in enumerate(next(best_ws.iter_rows(min_row=1, max_row=1)))]
+            rows = []
+            for excel_row in best_ws.iter_rows(min_row=2, values_only=True):
+                row = {}
+                for h, v in zip(raw_headers, excel_row):
+                    row[h] = str(v) if v is not None else ''
+                rows.append(row)
+            return rows, None
+        except ImportError:
+            return None, 'openpyxl not installed'
+    else:
+        return None, 'Only .csv, .xlsx supported'
+
+
+@login_required
+def import_plan(request):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    uploaded  = request.FILES.get('file')
+    plan_date = request.POST.get('date', str(date.today()))
+
+    if not uploaded:
+        return JsonResponse({'error': 'No file uploaded'}, status=400)
+
+    rows, err = _read_file_rows(uploaded)
+    if err:
+        return JsonResponse({'error': err}, status=400)
+    if not rows:
+        return JsonResponse({'error': 'Empty file'}, status=400)
+
+    # Build column map from headers
+    sample_headers = list(rows[0].keys())
+    col_map = {}
+    for h in sample_headers:
+        key = h.strip().lower()
+        if key in PLAN_HEADER_MAP:
+            col_map[h] = PLAN_HEADER_MAP[key]
+
+    created = updated = skipped = 0
+    import_errors = []
+
+    for row_idx, row in enumerate(rows):
+        norm = {PLAN_HEADER_MAP[h.strip().lower()]: v.strip()
+                for h, v in row.items()
+                if h.strip().lower() in PLAN_HEADER_MAP and str(v).strip()}
+
+        store_id = str(norm.get('store_id_raw', '')).strip().split('.')[0]  # remove .0 from floats
+        if not store_id or store_id in ('None', 'nan', ''):
+            skipped += 1
+            continue
+
+        # Determine date
+        row_date = _parse_date_val(norm.get('date'))
+        if not row_date:
+            try:
+                row_date = datetime.strptime(plan_date, '%Y-%m-%d').date()
+            except:
+                skipped += 1
+                continue
+
+        store_obj = Store.objects.filter(store_code=store_id).first()
+
+        defaults = {
+            'store':          store_obj,
+            'store_name_raw': norm.get('store_name_raw', store_obj.name if store_obj else ''),
+            'ordered':        _to_int(norm.get('ordered', 0)),
+            'remaining':      _to_int(norm.get('remaining', norm.get('ordered', 0))),
+            'hb_bd':          norm.get('hb_bd', ''),
+            'doors':          norm.get('doors', ''),
+            'open_status':    norm.get('open_status', ''),
+            'closed_status':  norm.get('closed_status', ''),
+            'company':        norm.get('company', ''),
+            'window':         norm.get('window', ''),
+            'comments':       norm.get('comments', ''),
+            'mergers':        norm.get('mergers', ''),
+            'loaders':        norm.get('loaders', ''),
+            'check_field':    norm.get('check_field', ''),
+            'row_order':      _to_int(norm.get('row_order', row_idx)) if norm.get('row_order') else row_idx,
+        }
+
+        try:
+            obj, was_created = DailyPlan.objects.update_or_create(
+                date=row_date, store_id_raw=store_id, hb_bd=defaults.get('hb_bd', ''),
+                defaults=defaults,
+            )
+            if was_created: created += 1
+            else: updated += 1
+        except Exception as e:
+            skipped += 1
+            import_errors.append({'row': row_idx + 2, 'store_id': store_id, 'error': str(e)})
+            continue
+
+    return JsonResponse({
+        'ok': True,
+        'created': created,
+        'updated': updated,
+        'skipped': skipped,
+        'errors': import_errors[:10],
+    })
+
+
+@login_required
+def import_picking(request):
+    """Parse Pick Remaining By Customer grouped CSV report."""
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    uploaded  = request.FILES.get('file')
+    plan_date = request.POST.get('date', str(date.today()))
+
+    if not uploaded:
+        return JsonResponse({'error': 'No file uploaded'}, status=400)
+
+    raw   = uploaded.read()
+    fname = uploaded.name.lower()
+
+    if fname.endswith(('.xlsx', '.xls')):
+        return JsonResponse({'error': 'Picking report must be CSV. Please export as CSV from the picking system.'}, status=400)
+
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode('latin-1')
+        except UnicodeDecodeError:
+            text = raw.decode('utf-8', errors='replace')
+    lines = text.splitlines()
+
+    updated = not_found = 0
+    current_store_id = None
+
+    for line in lines:
+        cols = [c.strip().strip('"') for c in line.split(',')]
+
+        # Customer line: ",Customer:,,,318 - Monaghan 318, , ,"
+        if len(cols) > 2 and cols[1].strip().lower() == 'customer:':
+            raw = next((c for c in cols[2:] if c.strip()), '')
+            match = re.match(r'(\d+)', raw.strip())
+            current_store_id = match.group(1) if match else None
+            continue
+
+        # Totals line
+        if cols[0].strip().lower() == 'totals' and current_store_id:
+            non_empty = [c for c in cols if c.strip() not in ('', 'Totals')]
+            if len(non_empty) >= 4:
+                order_total  = _to_int(non_empty[1])
+                picked_total = _to_int(non_empty[2])
+                remaining    = _to_int(non_empty[3])
+            elif len(non_empty) >= 3:
+                order_total  = _to_int(non_empty[0])
+                picked_total = _to_int(non_empty[1])
+                remaining    = _to_int(non_empty[2])
+            else:
+                current_store_id = None
+                continue
+
+            try:
+                plan = DailyPlan.objects.get(date=plan_date, store_id_raw=current_store_id)
+                plan.ordered   = order_total
+                plan.remaining = remaining
+                plan.save(update_fields=['ordered', 'remaining', 'updated_at'])
+                _sync_to_yardmaster(plan)
+                updated += 1
+            except DailyPlan.DoesNotExist:
+                not_found += 1
+
+            current_store_id = None
+
+    return JsonResponse({'ok': True, 'updated': updated, 'not_found': not_found})
+
+
+@login_required
+def export_plan(request):
+    date_filter = request.GET.get('date', str(date.today()))
+    plans = DailyPlan.objects.select_related('store').filter(date=date_filter)
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="daily_plan_{date_filter}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['Date', 'HB/BD', 'ID', 'Store', 'Ordered', 'Remaining', 'Picked',
+                     'Pick Carryover', 'Progress %', 'Doors', 'Open', 'Closed',
+                     'Company', 'Window', 'Comments', 'Mergers', 'Loaders', 'Check'])
+    for p in plans:
+        writer.writerow([
+            p.date, p.hb_bd, p.store_id_raw, p.store_display,
+            p.ordered, p.remaining, p.picked, p.pick_carryover,
+            p.progress_pct,
+            p.doors, p.open_status, p.closed_status, p.company, p.window,
+            p.comments, p.mergers, p.loaders, p.check_field,
+        ])
+    return response

@@ -286,6 +286,8 @@ def import_plan(request):
 
         store_obj = Store.objects.filter(store_code=store_id).first()
 
+        row_order_val = _to_int(norm.get('row_order', row_idx)) if norm.get('row_order') else row_idx
+
         defaults = {
             'store':          store_obj,
             'store_name_raw': norm.get('store_name_raw', store_obj.name if store_obj else ''),
@@ -301,12 +303,13 @@ def import_plan(request):
             'mergers':        norm.get('mergers', ''),
             'loaders':        norm.get('loaders', ''),
             'check_field':    norm.get('check_field', ''),
-            'row_order':      _to_int(norm.get('row_order', row_idx)) if norm.get('row_order') else row_idx,
+            'row_order':      row_order_val,
         }
 
         try:
             obj, was_created = DailyPlan.objects.update_or_create(
                 date=row_date, store_id_raw=store_id, hb_bd=defaults.get('hb_bd', ''),
+                row_order=row_order_val,
                 defaults=defaults,
             )
             if was_created: created += 1
@@ -383,12 +386,18 @@ def import_picking(request):
                 continue
 
             try:
-                plan = DailyPlan.objects.get(date=plan_date, store_id_raw=current_store_id)
-                plan.ordered   = order_total
-                plan.remaining = remaining
-                plan.save(update_fields=['ordered', 'remaining', 'updated_at'])
-                _sync_to_yardmaster(plan)
-                updated += 1
+                matches = list(DailyPlan.objects.filter(date=plan_date, store_id_raw=current_store_id))
+                if len(matches) == 1:
+                    plan = matches[0]
+                    plan.ordered   = order_total
+                    plan.remaining = remaining
+                    plan.save(update_fields=['ordered', 'remaining', 'updated_at'])
+                    _sync_to_yardmaster(plan)
+                    updated += 1
+                elif len(matches) > 1:
+                    not_found += 1
+                else:
+                    not_found += 1
             except DailyPlan.DoesNotExist:
                 not_found += 1
 

@@ -92,47 +92,47 @@ body.light td select.cell-input option { background: #fff; color: #000 !importan
 /* ── ROW COLORS BY PROGRESS ── */
 
 /* Manual flag = red alert (overrides all) */
-tr.row-flag td        { background: #c0392b !important; color: #fff !important; border-bottom: 1px solid #e74c3c !important; }
-tr.row-flag:hover td  { background: #e74c3c !important; }
-tr.row-flag td :not(input):not(select):not(option) { color: #fff !important; }
+tr.row-flag td        { background: #7a3b34 !important; color: #f5e6e4 !important; border-bottom: 1px solid #96453c !important; }
+tr.row-flag:hover td  { background: #8a453d !important; }
+tr.row-flag td :not(input):not(select):not(option) { color: #f5e6e4 !important; }
 
-/* Rigid = orange (always, ignores progress) */
-tr.row-rigid td        { background: #3b1f6e !important; color: #fff !important; border-bottom: 1px solid #5b35a0 !important; }
-tr.row-rigid:hover td  { background: #4a2888 !important; }
-tr.row-rigid td :not(input):not(select):not(option) { color: #fff !important; }
+/* Rigid = purple (always, ignores progress) — kept distinct on purpose to separate truck types */
+tr.row-rigid td        { background: #4a3670 !important; color: #ede8f7 !important; border-bottom: 1px solid #5c4685 !important; }
+tr.row-rigid:hover td  { background: #543f7c !important; }
+tr.row-rigid td :not(input):not(select):not(option) { color: #ede8f7 !important; }
 
 /* < 30% = light grey/white in dark mode */
-tr.row-low td          { background: #1e2535 !important; color: #cbd5e1 !important; border-bottom: 1px solid #2a3448 !important; }
-tr.row-low:hover td    { background: #252e42 !important; }
-tr.row-low td *        { color: #cbd5e1 !important; }
+tr.row-low td          { background: #232a3a !important; color: #c7d0dd !important; border-bottom: 1px solid #2d3548 !important; }
+tr.row-low:hover td    { background: #2a3242 !important; }
+tr.row-low td *        { color: #c7d0dd !important; }
 
 /* 31-60% = amber/yellow */
-tr.row-mid td          { background: #5c4200 !important; color: #fff !important; border-bottom: 1px solid #7a5800 !important; }
-tr.row-mid:hover td    { background: #705000 !important; }
-tr.row-mid td *        { color: #fff !important; }
+tr.row-mid td          { background: #574a2e !important; color: #f0e6cf !important; border-bottom: 1px solid #6a5a38 !important; }
+tr.row-mid:hover td    { background: #635433 !important; }
+tr.row-mid td *        { color: #f0e6cf !important; }
 
 /* 61-100% = green (same for complete) */
-tr.row-high td         { background: #0a4a25 !important; color: #fff !important; border-bottom: 1px solid #0f6030 !important; }
-tr.row-high:hover td   { background: #0d5a2e !important; }
-tr.row-high td *       { color: #fff !important; }
+tr.row-high td         { background: #234a35 !important; color: #d9ecdf !important; border-bottom: 1px solid #2b5940 !important; }
+tr.row-high:hover td   { background: #29553d !important; }
+tr.row-high td *       { color: #d9ecdf !important; }
 
-tr.row-complete td     { background: #0a4a25 !important; color: #fff !important; border-bottom: 1px solid #0f6030 !important; }
-tr.row-complete:hover td { background: #0d5a2e !important; }
-tr.row-complete td *   { color: #fff !important; }
+tr.row-complete td     { background: #234a35 !important; color: #d9ecdf !important; border-bottom: 1px solid #2b5940 !important; }
+tr.row-complete:hover td { background: #29553d !important; }
+tr.row-complete td *   { color: #d9ecdf !important; }
 
-/* LIGHT MODE - vivid solid colors, always black text */
-body.light tr.row-flag td        { background: #e74c3c !important; color: #000 !important; border-bottom: 1px solid #c0392b !important; }
-body.light tr.row-flag td :not(input):not(select):not(option) { color: #000 !important; }
-body.light tr.row-rigid td       { background: #ddd6fe !important; color: #000 !important; border-bottom: 1px solid #a78bfa !important; }
-body.light tr.row-rigid td *     { color: #000 !important; }
-body.light tr.row-low td         { background: #f0f0f0 !important; color: #000 !important; border-bottom: 1px solid #d0d0d0 !important; }
-body.light tr.row-low td *       { color: #000 !important; }
-body.light tr.row-mid td         { background: #ffe066 !important; color: #000 !important; border-bottom: 1px solid #e0c020 !important; }
-body.light tr.row-mid td *       { color: #000 !important; }
-body.light tr.row-high td        { background: #80e6a0 !important; color: #000 !important; border-bottom: 1px solid #50c070 !important; }
-body.light tr.row-high td :not(input):not(select):not(option) { color: #000 !important; }
-body.light tr.row-complete td    { background: #80e6a0 !important; color: #000 !important; border-bottom: 1px solid #50c070 !important; }
-body.light tr.row-complete td *  { color: #000 !important; }
+/* LIGHT MODE - softened pastel colors, always dark text */
+body.light tr.row-flag td        { background: #f2c6c0 !important; color: #3a1f1c !important; border-bottom: 1px solid #e0a89f !important; }
+body.light tr.row-flag td :not(input):not(select):not(option) { color: #3a1f1c !important; }
+body.light tr.row-rigid td       { background: #e6dffa !important; color: #2e2450 !important; border-bottom: 1px solid #cdc0ef !important; }
+body.light tr.row-rigid td *     { color: #2e2450 !important; }
+body.light tr.row-low td         { background: #f4f4f4 !important; color: #333 !important; border-bottom: 1px solid #e2e2e2 !important; }
+body.light tr.row-low td *       { color: #333 !important; }
+body.light tr.row-mid td         { background: #fbeeb8 !important; color: #4a3c10 !important; border-bottom: 1px solid #edd98e !important; }
+body.light tr.row-mid td *       { color: #4a3c10 !important; }
+body.light tr.row-high td        { background: #c9ecd4 !important; color: #1c4a2c !important; border-bottom: 1px solid #a9dcba !important; }
+body.light tr.row-high td :not(input):not(select):not(option) { color: #1c4a2c !important; }
+body.light tr.row-complete td    { background: #c9ecd4 !important; color: #1c4a2c !important; border-bottom: 1px solid #a9dcba !important; }
+body.light tr.row-complete td *  { color: #1c4a2c !important; }
 
 /* Context menu */
 #dp-ctx-menu {
@@ -256,7 +256,7 @@ body.light tr.row-complete td *  { color: #000 !important; }
       <div onclick="setRefresh(0)"   style="padding:6px 12px;cursor:pointer;font-size:12px;border-radius:5px;color:var(--danger);" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">Turn off</div>
     </div>
   </div>
-  <button class="btn-theme" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+
 </div>
 
 <!-- TABLE -->
@@ -322,7 +322,7 @@ body.light tr.row-complete td *  { color: #000 !important; }
         <td>
           <div class="prog-wrap" id="prog-{{ p.pk }}">
             <div class="prog-bar-bg">
-              <div class="prog-bar-fill" style="width:{{ p.progress_pct }}%;background:{% if p.is_complete %}#22c55e{% elif p.progress_pct >= 61 %}#4ade80{% elif p.progress_pct >= 31 %}#fbbf24{% else %}#f87171{% endif %};"></div>
+              <div class="prog-bar-fill" style="width:{{ p.progress_pct }}%;background:{% if p.is_complete %}#4caf7d{% elif p.progress_pct >= 61 %}#6fc696{% elif p.progress_pct >= 31 %}#e0bb5a{% else %}#e0847e{% endif %};"></div>
             </div>
             <span class="prog-pct">{{ p.progress_pct }}%</span>
           </div>
@@ -412,7 +412,7 @@ body.light tr.row-complete td *  { color: #000 !important; }
 <div id="dp-ctx-menu">
   <div class="ctx-title">Mark row</div>
   <div class="ctx-item" onclick="dpSetFlag('red')">
-    <span class="ctx-dot" style="background:#e74c3c"></span> Red alert
+    <span class="ctx-dot" style="background:#96453c"></span> Red alert
   </div>
   <div style="height:1px;background:var(--border);margin:4px 0;"></div>
   <div class="ctx-item" onclick="dpSetFlag('')">✕ &nbsp;Clear flag</div>
@@ -424,17 +424,6 @@ body.light tr.row-complete td *  { color: #000 !important; }
 {% block extra_js %}
 <script>
 const DATE_FILTER = '{{ date_filter }}';
-
-// ── THEME ──
-function toggleTheme() {
-  const isLight = document.body.classList.toggle('light');
-  document.getElementById('btn-theme').textContent = isLight ? '🌑' : '🌙';
-  localStorage.setItem('ym-theme', isLight ? 'light' : 'dark');
-}
-if (localStorage.getItem('ym-theme') === 'light') {
-  document.body.classList.add('light');
-  document.getElementById('btn-theme').textContent = '🌑';
-}
 
 // ── FILTERS ──
 function applyFilters() {
@@ -554,7 +543,7 @@ function updateRowProgress(id, data) {
   const pct  = row.querySelector('.prog-pct');
   if (fill) {
     fill.style.width = data.progress_pct + '%';
-    fill.style.background = data.is_complete ? '#22c55e' : data.progress_pct >= 61 ? '#4ade80' : data.progress_pct >= 31 ? '#fbbf24' : '#f87171';
+    fill.style.background = data.is_complete ? '#4caf7d' : data.progress_pct >= 61 ? '#6fc696' : data.progress_pct >= 31 ? '#e0bb5a' : '#e0847e';
   }
   if (pct) pct.textContent = data.progress_pct + '%';
 

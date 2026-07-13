@@ -15,6 +15,13 @@
   --danger: #ff4d6d; --warn: #ffb340; --info: #4d9fff; --purple: #9d7dff;
   --mono: 'JetBrains Mono', monospace; --sans: 'DM Sans', sans-serif;
 }
+body.light {
+  --bg: #f7f8fa; --surface: #ffffff; --surface2: #ffffff; --surface3: #f0f2f5;
+  --border: #e2e5ea; --border2: #d3d7de;
+  --text: #1a1d23; --muted: #8a8f98; --muted2: #5b6472;
+  --accent: #00a878; --accent2: #00916a;
+  --danger: #d8324a; --warn: #b8790a; --info: #2b73d8; --purple: #6b4fd8;
+}
 body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
 
 .topbar {
@@ -23,7 +30,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   flex-shrink: 0; position: relative; z-index: 100;
 }
 .topbar::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.35; }
-.logo { font-family: var(--mono); font-size: 15px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px; text-decoration: none; }
+.logo { font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; text-decoration: none; }
 .logo-icon { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #0088ff); display: flex; align-items: center; justify-content: center; font-size: 13px; }
 .logo span { color: var(--accent); }
 .nav-item { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted2); transition: all 0.15s; text-decoration: none; }
@@ -34,6 +41,8 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 .admin-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(0,229,160,0.15); color: var(--accent); font-family: var(--mono); font-weight: 600; }
 .btn-topbar { font-size: 11px; padding: 5px 11px; border-radius: 6px; background: transparent; border: 1px solid var(--border2); color: var(--muted2); cursor: pointer; font-family: var(--sans); transition: all 0.15s; }
 .btn-topbar:hover { border-color: var(--danger); color: var(--danger); }
+.btn-theme-global { width: 28px; height: 28px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border2); cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.btn-theme-global:hover { border-color: var(--accent); }
 
 .page-content { flex: 1; padding: 24px; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
@@ -83,6 +92,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 {% block extra_head %}{% endblock %}
 </head>
 <body>
+<script>
+if (localStorage.getItem('ym-theme') === 'light') { document.body.classList.add('light'); }
+</script>
 <div class="topbar">
   <a href="{% url 'load_list' %}" class="logo"><div class="logo-icon">⬡</div>Yard<span>Master</span></a>
   <a href="{% url 'load_list' %}" class="nav-item {% block nav_loads %}{% endblock %}">Loads</a>
@@ -93,6 +105,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
   <a href="{% url 'company_list' %}" class="nav-item {% block nav_companies %}{% endblock %}">Companies</a>
   {% endif %}
   <div class="topbar-right">
+    <button class="btn-theme-global" id="btn-theme-global" onclick="toggleGlobalTheme()" title="Toggle theme">🌙</button>
     <div class="user-chip">
       <div class="user-avatar">{{ request.user.username|first|upper }}</div>
       <span>{{ request.user.username }}</span>
@@ -112,6 +125,17 @@ function showToast(msg, isError=false) {
   clearTimeout(t._t); t._t = setTimeout(() => t.className = '', 2200);
 }
 const CSRF = '{{ csrf_token }}';
+
+function toggleGlobalTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('btn-theme-global').textContent = isLight ? '🌑' : '🌙';
+  const localBtn = document.getElementById('btn-theme');
+  if (localBtn) localBtn.textContent = isLight ? '🌑' : '🌙';
+  localStorage.setItem('ym-theme', isLight ? 'light' : 'dark');
+}
+if (localStorage.getItem('ym-theme') === 'light') {
+  document.getElementById('btn-theme-global').textContent = '🌑';
+}
 </script>
 {% block extra_js %}{% endblock %}
 </body>

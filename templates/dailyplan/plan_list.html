@@ -243,9 +243,9 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
   <div class="tbar-sep"></div>
   <input class="tbar-search" type="text" placeholder="🔍 Quick search…" oninput="quickSearch(this.value)">
   {% if is_admin %}
-  <button class="tbar-btn" id="btn-add-above" onclick="addRow('above')" disabled style="border-color:rgba(0,229,160,0.3);color:var(--accent);">+ Acima</button>
-  <button class="tbar-btn" id="btn-add-below" onclick="addRow('below')" disabled style="border-color:rgba(0,229,160,0.3);color:var(--accent);">+ Abaixo</button>
-  <button class="tbar-btn" id="btn-delete-row" onclick="deleteSelectedRow()" disabled style="border-color:rgba(255,77,109,0.3);color:var(--danger);">🗑 Excluir</button>
+  <button class="tbar-btn" id="btn-add-above" onclick="addRow('above')" disabled style="border-color:rgba(0,229,160,0.3);color:var(--accent);">+ Above</button>
+  <button class="tbar-btn" id="btn-add-below" onclick="addRow('below')" disabled style="border-color:rgba(0,229,160,0.3);color:var(--accent);">+ Below</button>
+  <button class="tbar-btn" id="btn-delete-row" onclick="deleteSelectedRow()" disabled style="border-color:rgba(255,77,109,0.3);color:var(--danger);">🗑 Delete</button>
   <button class="tbar-btn tbar-btn-import" onclick="openModal('plan')">↑ Import Plan</button>
   <button class="tbar-btn tbar-btn-picking" onclick="openModal('picking')">↑ Update Picking</button>
   {% endif %}
@@ -481,19 +481,19 @@ async function addRow(position) {
     });
     const data = await res.json();
     if (data.ok) {
-      showToast('Linha adicionada ✓');
+      showToast('Row added ✓');
       location.reload();
     } else {
-      showToast(data.error || 'Erro ao adicionar linha', true);
+      showToast(data.error || 'Error adding row', true);
     }
   } catch (e) {
-    showToast('Erro de rede', true);
+    showToast('Network error', true);
   }
 }
 
 async function deleteSelectedRow() {
   if (!selectedRowId) return;
-  if (!confirm('Tem certeza que deseja excluir esta linha? Essa ação não pode ser desfeita.')) return;
+  if (!confirm('Are you sure you want to delete this row? This action cannot be undone.')) return;
   try {
     const res = await fetch('/daily/api/delete-row/', {
       method: 'POST',
@@ -502,13 +502,13 @@ async function deleteSelectedRow() {
     });
     const data = await res.json();
     if (data.ok) {
-      showToast('Linha excluída ✓');
+      showToast('Row deleted ✓');
       location.reload();
     } else {
-      showToast(data.error || 'Erro ao excluir linha', true);
+      showToast(data.error || 'Error deleting row', true);
     }
   } catch (e) {
-    showToast('Erro de rede', true);
+    showToast('Network error', true);
   }
 }
 

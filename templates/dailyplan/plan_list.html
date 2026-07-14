@@ -66,7 +66,9 @@ thead th {
   text-transform: uppercase; letter-spacing: 0.4px; min-width: 80px;
 }
 thead th:first-child { position: sticky; left: 0; z-index: 21; min-width: 110px; }
-thead th:nth-child(4) { min-width: 180px; }
+thead th:nth-child(5) { min-width: 180px; }
+.row-checkbox { width: 34px; min-width: 34px; text-align: center; }
+tr.row-selected td { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 tbody tr { border-bottom: 1px solid var(--border); }
 tbody tr:hover td { filter: brightness(1.15); }
@@ -241,6 +243,9 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
   <div class="tbar-sep"></div>
   <input class="tbar-search" type="text" placeholder="🔍 Quick search…" oninput="quickSearch(this.value)">
   {% if is_admin %}
+  <button class="tbar-btn" id="btn-add-above" onclick="addRow('above')" disabled style="border-color:rgba(0,229,160,0.3);color:var(--accent);">+ Acima</button>
+  <button class="tbar-btn" id="btn-add-below" onclick="addRow('below')" disabled style="border-color:rgba(0,229,160,0.3);color:var(--accent);">+ Abaixo</button>
+  <button class="tbar-btn" id="btn-delete-row" onclick="deleteSelectedRow()" disabled style="border-color:rgba(255,77,109,0.3);color:var(--danger);">🗑 Excluir</button>
   <button class="tbar-btn tbar-btn-import" onclick="openModal('plan')">↑ Import Plan</button>
   <button class="tbar-btn tbar-btn-picking" onclick="openModal('picking')">↑ Update Picking</button>
   {% endif %}
@@ -264,6 +269,7 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
   <table id="grid">
     <thead>
       <tr>
+        {% if is_admin %}<th class="row-checkbox"></th>{% endif %}
         <th>Date</th>
         <th>HB/BD</th>
         <th>ID</th>
@@ -298,11 +304,27 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
         <tr id="row-{{ p.pk }}" data-id="{{ p.pk }}" data-pct="{{ p.progress_pct }}" data-rigid="0" class="row-low" oncontextmenu="dpCtxMenu(event, {{ p.pk }}, '')">
       {% endif %}
 
+        <!-- Row select checkbox -->
+        {% if is_admin %}
+        <td class="row-checkbox">
+          <input type="checkbox" class="row-select-cb" data-id="{{ p.pk }}" onchange="onRowSelect(this)">
+        </td>
+        {% endif %}
+
         <!-- Sticky store name -->
         <td><div class="cell" style="font-family:var(--mono);font-size:11px;color:var(--muted2)">{{ p.date }}</div></td>
         <td><div class="cell">{% if p.hb_bd %}<span class="badge badge-{{ p.hb_bd }}">{{ p.hb_bd }}</span>{% endif %}</div></td>
+        {% if is_admin %}
+        <td class="editable" data-id="{{ p.pk }}" data-field="store_id_raw">
+          <div class="cell" style="font-family:var(--mono)">{{ p.store_id_raw }}</div>
+        </td>
+        <td class="editable" data-id="{{ p.pk }}" data-field="store_name_raw">
+          <div class="cell"><strong>{{ p.store_display }}</strong></div>
+        </td>
+        {% else %}
         <td><div class="cell" style="font-family:var(--mono)">{{ p.store_id_raw }}</div></td>
         <td><div class="cell"><strong>{{ p.store_display }}</strong></div></td>
+        {% endif %}
 
         {% if is_admin %}
         <td class="editable" data-id="{{ p.pk }}" data-field="ordered" data-type="number">
@@ -369,7 +391,7 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
         {% endif %}
       </tr>
       {% empty %}
-      <tr><td colspan="17"><div class="empty"><p>No plan found for this date</p><small>Import a Daily Load Plan to get started.</small></div></td></tr>
+      <tr><td colspan="18"><div class="empty"><p>No plan found for this date</p><small>Import a Daily Load Plan to get started.</small></div></td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -424,6 +446,71 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
 {% block extra_js %}
 <script>
 const DATE_FILTER = '{{ date_filter }}';
+
+// ── ROW SELECT / ADD / DELETE ──
+let selectedRowId = null;
+
+function onRowSelect(cb) {
+  if (cb.checked) {
+    document.querySelectorAll('.row-select-cb').forEach(other => {
+      if (other !== cb) other.checked = false;
+    });
+    document.querySelectorAll('#grid tbody tr').forEach(tr => tr.classList.remove('row-selected'));
+    selectedRowId = cb.dataset.id;
+    const tr = document.getElementById(`row-${selectedRowId}`);
+    if (tr) tr.classList.add('row-selected');
+  } else {
+    selectedRowId = null;
+    const tr = document.getElementById(`row-${cb.dataset.id}`);
+    if (tr) tr.classList.remove('row-selected');
+  }
+  const hasSelection = !!selectedRowId;
+  ['btn-add-above', 'btn-add-below', 'btn-delete-row'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !hasSelection;
+  });
+}
+
+async function addRow(position) {
+  if (!selectedRowId) return;
+  try {
+    const res = await fetch('/daily/api/add-row/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({ref_id: selectedRowId, position}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('Linha adicionada ✓');
+      location.reload();
+    } else {
+      showToast(data.error || 'Erro ao adicionar linha', true);
+    }
+  } catch (e) {
+    showToast('Erro de rede', true);
+  }
+}
+
+async function deleteSelectedRow() {
+  if (!selectedRowId) return;
+  if (!confirm('Tem certeza que deseja excluir esta linha? Essa ação não pode ser desfeita.')) return;
+  try {
+    const res = await fetch('/daily/api/delete-row/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({id: selectedRowId}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('Linha excluída ✓');
+      location.reload();
+    } else {
+      showToast(data.error || 'Erro ao excluir linha', true);
+    }
+  } catch (e) {
+    showToast('Erro de rede', true);
+  }
+}
 
 // ── FILTERS ──
 function applyFilters() {
@@ -516,6 +603,8 @@ async function commitEdit(td, value) {
       // Update display
       if (field === 'open_status' || field === 'closed_status') {
         cell.innerHTML = value ? `<span class="${value === 'Open' ? 'open-badge' : 'closed-badge'}">${value}</span>` : '';
+      } else if (field === 'store_name_raw') {
+        cell.innerHTML = `<strong>${value}</strong>`;
       } else {
         cell.textContent = value;
       }

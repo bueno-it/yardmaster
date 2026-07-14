@@ -7,7 +7,7 @@ from datetime import date, datetime
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Max
 
 from .models import DailyPlan
 from transport.models import Store, Load
@@ -96,7 +96,7 @@ def update_cell(request):
 
     EDITABLE = ['hb_bd', 'doors', 'open_status', 'closed_status', 'company',
                 'window', 'comments', 'mergers', 'loaders', 'check_field',
-                'ordered', 'remaining']
+                'ordered', 'remaining', 'store_id_raw', 'store_name_raw']
 
     if field not in EDITABLE:
         return JsonResponse({'error': 'Not editable'}, status=400)
@@ -264,6 +264,7 @@ def import_plan(request):
 
     created = updated = skipped = 0
     import_errors = []
+    occurrence_counts = {}
 
     for row_idx, row in enumerate(rows):
         norm = {PLAN_HEADER_MAP[h.strip().lower()]: v.strip()
@@ -287,13 +288,23 @@ def import_plan(request):
         store_obj = Store.objects.filter(store_code=store_id).first()
 
         row_order_val = _to_int(norm.get('row_order', row_idx)) if norm.get('row_order') else row_idx
+        hb_bd_val = norm.get('hb_bd', '')
+
+        # Nth time this exact store+hb_bd combo appears in THIS file, for this date.
+        # Using the occurrence count (instead of raw row position) as part of the
+        # identity means reimporting the same file always matches the same
+        # existing rows even if unrelated rows shifted position, while still
+        # keeping genuine duplicate lines (same store+hb_bd twice) as separate rows.
+        occ_key = (row_date, store_id, hb_bd_val)
+        dup_seq_val = occurrence_counts.get(occ_key, 0)
+        occurrence_counts[occ_key] = dup_seq_val + 1
 
         defaults = {
             'store':          store_obj,
             'store_name_raw': norm.get('store_name_raw', store_obj.name if store_obj else ''),
             'ordered':        _to_int(norm.get('ordered', 0)),
             'remaining':      _to_int(norm.get('remaining', norm.get('ordered', 0))),
-            'hb_bd':          norm.get('hb_bd', ''),
+            'hb_bd':          hb_bd_val,
             'doors':          norm.get('doors', ''),
             'open_status':    norm.get('open_status', ''),
             'closed_status':  norm.get('closed_status', ''),
@@ -304,12 +315,13 @@ def import_plan(request):
             'loaders':        norm.get('loaders', ''),
             'check_field':    norm.get('check_field', ''),
             'row_order':      row_order_val,
+            'dup_seq':        dup_seq_val,
         }
 
         try:
             obj, was_created = DailyPlan.objects.update_or_create(
-                date=row_date, store_id_raw=store_id, hb_bd=defaults.get('hb_bd', ''),
-                row_order=row_order_val,
+                date=row_date, store_id_raw=store_id, hb_bd=hb_bd_val,
+                dup_seq=dup_seq_val,
                 defaults=defaults,
             )
             if was_created: created += 1
@@ -359,6 +371,7 @@ def import_picking(request):
 
     updated = not_found = 0
     current_store_id = None
+    seen_store_ids = set()
 
     for line in lines:
         cols = [c.strip().strip('"') for c in line.split(',')]
@@ -385,13 +398,14 @@ def import_picking(request):
                 current_store_id = None
                 continue
 
+            seen_store_ids.add(current_store_id)
+
             try:
                 matches = list(DailyPlan.objects.filter(date=plan_date, store_id_raw=current_store_id))
                 if len(matches) == 1:
                     plan = matches[0]
-                    plan.ordered   = order_total
                     plan.remaining = remaining
-                    plan.save(update_fields=['ordered', 'remaining', 'updated_at'])
+                    plan.save(update_fields=['remaining', 'updated_at'])
                     _sync_to_yardmaster(plan)
                     updated += 1
                 elif len(matches) > 1:
@@ -403,7 +417,80 @@ def import_picking(request):
 
             current_store_id = None
 
-    return JsonResponse({'ok': True, 'updated': updated, 'not_found': not_found})
+    # Stores that were still in-progress (remaining > 0) but no longer appear
+    # in this picking file are treated as finished: zero them out and close them.
+    stale_plans = DailyPlan.objects.filter(date=plan_date, remaining__gt=0).exclude(
+        store_id_raw__in=seen_store_ids
+    )
+    auto_closed = 0
+    for plan in stale_plans:
+        plan.remaining     = 0
+        plan.closed_status = 'Closed'
+        plan.save(update_fields=['remaining', 'closed_status', 'updated_at'])
+        _sync_to_yardmaster(plan)
+        auto_closed += 1
+
+    return JsonResponse({'ok': True, 'updated': updated, 'not_found': not_found, 'auto_closed': auto_closed})
+
+
+@login_required
+def add_row(request):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    data     = json.loads(request.body)
+    ref_id   = data.get('ref_id')
+    position = data.get('position')
+
+    if position not in ('above', 'below'):
+        return JsonResponse({'error': 'Invalid position'}, status=400)
+
+    ref_plan = get_object_or_404(DailyPlan, pk=ref_id)
+    target_order = ref_plan.row_order if position == 'above' else ref_plan.row_order + 1
+
+    # Shift every row at/after the target position up by 1 (highest first,
+    # so we never momentarily collide with the unique constraint).
+    to_shift = list(DailyPlan.objects.filter(
+        date=ref_plan.date, row_order__gte=target_order
+    ).order_by('-row_order'))
+    for p in to_shift:
+        p.row_order = p.row_order + 1
+        p.save(update_fields=['row_order', 'updated_at'])
+
+    new_plan_store_id = ''
+    new_plan_hb_bd = ''
+    max_dup = DailyPlan.objects.filter(
+        date=ref_plan.date, store_id_raw=new_plan_store_id, hb_bd=new_plan_hb_bd
+    ).aggregate(m=Max('dup_seq'))['m']
+    new_dup_seq = (max_dup + 1) if max_dup is not None else 0
+
+    new_plan = DailyPlan.objects.create(
+        date=ref_plan.date,
+        row_order=target_order,
+        hb_bd=new_plan_hb_bd,
+        store_id_raw=new_plan_store_id,
+        store_name_raw='New store',
+        ordered=0,
+        remaining=0,
+        dup_seq=new_dup_seq,
+    )
+
+    return JsonResponse({'ok': True, 'id': new_plan.pk})
+
+
+@login_required
+def delete_row(request):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    data = json.loads(request.body)
+    plan = get_object_or_404(DailyPlan, pk=data.get('id'))
+    plan.delete()
+    return JsonResponse({'ok': True})
 
 
 @login_required

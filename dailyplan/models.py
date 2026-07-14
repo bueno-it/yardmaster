@@ -18,12 +18,13 @@ class DailyPlan(models.Model):
     loaders        = models.CharField(max_length=100, blank=True)
     check_field    = models.CharField(max_length=100, blank=True)
     row_order      = models.IntegerField(default=0)
+    dup_seq        = models.IntegerField(default=0)  # 1st/2nd/... occurrence of this store+hb_bd on this date
     flag_color     = models.CharField(max_length=20, blank=True, default='')  # manual alert flag
     created_at     = models.DateTimeField(auto_now_add=True)
     updated_at     = models.DateTimeField(auto_now=True)
     class Meta:
         ordering = ['date', 'row_order', 'store_name_raw']
-        unique_together = [['date', 'store_id_raw', 'hb_bd', 'row_order']]
+        unique_together = [['date', 'store_id_raw', 'hb_bd', 'dup_seq']]
     def __str__(self):
         name = self.store.name if self.store else self.store_name_raw
         return f"{self.date} | {name} | {self.remaining}/{self.ordered}"

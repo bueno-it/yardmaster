@@ -371,7 +371,6 @@ def import_picking(request):
 
     updated = not_found = 0
     current_store_id = None
-    seen_store_ids = set()
 
     for line in lines:
         cols = [c.strip().strip('"') for c in line.split(',')]
@@ -398,14 +397,16 @@ def import_picking(request):
                 current_store_id = None
                 continue
 
-            seen_store_ids.add(current_store_id)
-
             try:
                 matches = list(DailyPlan.objects.filter(date=plan_date, store_id_raw=current_store_id))
                 if len(matches) == 1:
                     plan = matches[0]
                     plan.remaining = remaining
-                    plan.save(update_fields=['remaining', 'updated_at'])
+                    update_fields = ['remaining', 'updated_at']
+                    if remaining == 0:
+                        plan.closed_status = 'Closed'
+                        update_fields.append('closed_status')
+                    plan.save(update_fields=update_fields)
                     _sync_to_yardmaster(plan)
                     updated += 1
                 elif len(matches) > 1:
@@ -417,20 +418,7 @@ def import_picking(request):
 
             current_store_id = None
 
-    # Stores that were still in-progress (remaining > 0) but no longer appear
-    # in this picking file are treated as finished: zero them out and close them.
-    stale_plans = DailyPlan.objects.filter(date=plan_date, remaining__gt=0).exclude(
-        store_id_raw__in=seen_store_ids
-    )
-    auto_closed = 0
-    for plan in stale_plans:
-        plan.remaining     = 0
-        plan.closed_status = 'Closed'
-        plan.save(update_fields=['remaining', 'closed_status', 'updated_at'])
-        _sync_to_yardmaster(plan)
-        auto_closed += 1
-
-    return JsonResponse({'ok': True, 'updated': updated, 'not_found': not_found, 'auto_closed': auto_closed})
+    return JsonResponse({'ok': True, 'updated': updated, 'not_found': not_found})
 
 
 @login_required

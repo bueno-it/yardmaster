@@ -183,56 +183,76 @@ PLAN_HEADER_MAP = {
     'amb pallets':       'pick_carryover',
     'wrap':              'mergers',
     'load':              'loaders',
-    'consol':            'check_field',
 }
 
 
 def _read_file_rows(uploaded):
-    """Read CSV or Excel and return list of dicts with string values."""
+    """Read CSV or Excel and return (rows, error, is_new_format).
+
+    is_new_format is True when the header row wasn't row 1 (a title/blank
+    row sits above it) — that's our signal this came from the newer
+    "Load plan for DD/MM/YYYY" export, which should only use a restricted
+    set of columns even if it contains other populated fields.
+    """
     fname = uploaded.name.lower()
     content = uploaded.read()
 
     if fname.endswith('.csv'):
         text = content.decode('utf-8-sig')
         rows = list(csv.DictReader(io.StringIO(text)))
-        return rows, None
+        return rows, None, False
 
     elif fname.endswith(('.xlsx', '.xls')):
         try:
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
 
-            # Find sheet with most matching headers
-            best_ws    = None
-            best_score = -1
+            # Find the (sheet, header_row) combo with the most matching headers.
+            # We scan the first several rows of each sheet because some report
+            # exports put a title (and a blank row) above the real header row.
+            MAX_HEADER_SCAN_ROWS = 10
+            best_ws         = None
+            best_header_row = 1
+            best_score      = -1
             for name in wb.sheetnames:
                 ws = wb[name]
-                try:
-                    headers = [str(c.value).strip().lower() if c.value else ''
-                               for c in next(ws.iter_rows(min_row=1, max_row=1))]
+                max_row_to_scan = min(MAX_HEADER_SCAN_ROWS, ws.max_row or 1)
+                for row_num in range(1, max_row_to_scan + 1):
+                    try:
+                        cell_row = next(ws.iter_rows(min_row=row_num, max_row=row_num))
+                    except StopIteration:
+                        continue
+                    headers = [str(c.value).strip().lower() if c.value else '' for c in cell_row]
                     score = sum(1 for h in headers if h in PLAN_HEADER_MAP)
                     if score > best_score:
-                        best_score = score
-                        best_ws    = ws
-                except StopIteration:
-                    continue
+                        best_score      = score
+                        best_ws         = ws
+                        best_header_row = row_num
 
-            if not best_ws:
-                return None, 'No usable sheet found'
+            if not best_ws or best_score <= 0:
+                return None, 'No usable sheet found', False
 
             raw_headers = [str(c.value).strip() if c.value else f'col{i}'
-                           for i, c in enumerate(next(best_ws.iter_rows(min_row=1, max_row=1)))]
+                           for i, c in enumerate(next(best_ws.iter_rows(min_row=best_header_row, max_row=best_header_row)))]
             rows = []
-            for excel_row in best_ws.iter_rows(min_row=2, values_only=True):
+            for excel_row in best_ws.iter_rows(min_row=best_header_row + 1, values_only=True):
                 row = {}
                 for h, v in zip(raw_headers, excel_row):
                     row[h] = str(v) if v is not None else ''
                 rows.append(row)
-            return rows, None
+            return rows, None, (best_header_row != 1)
         except ImportError:
-            return None, 'openpyxl not installed'
+            return None, 'openpyxl not installed', False
     else:
-        return None, 'Only .csv, .xlsx supported'
+        return None, 'Only .csv, .xlsx supported', False
+
+
+# Fields allowed for the newer "Load plan for DD/MM/YYYY" export format —
+# everything else in that file (Comments, Check, Wrap, Load, Bay, etc.) is
+# ignored even if populated.
+NEW_FORMAT_ALLOWED_FIELDS = {
+    'date', 'hb_bd', 'store_id_raw', 'store_name_raw', 'ordered', 'company', 'window',
+}
 
 
 @login_required
@@ -248,7 +268,7 @@ def import_plan(request):
     if not uploaded:
         return JsonResponse({'error': 'No file uploaded'}, status=400)
 
-    rows, err = _read_file_rows(uploaded)
+    rows, err, is_new_format = _read_file_rows(uploaded)
     if err:
         return JsonResponse({'error': err}, status=400)
     if not rows:
@@ -270,6 +290,9 @@ def import_plan(request):
         norm = {PLAN_HEADER_MAP[h.strip().lower()]: v.strip()
                 for h, v in row.items()
                 if h.strip().lower() in PLAN_HEADER_MAP and str(v).strip()}
+
+        if is_new_format:
+            norm = {k: v for k, v in norm.items() if k in NEW_FORMAT_ALLOWED_FIELDS}
 
         store_id = str(norm.get('store_id_raw', '')).strip().split('.')[0]  # remove .0 from floats
         if not store_id or store_id in ('None', 'nan', ''):

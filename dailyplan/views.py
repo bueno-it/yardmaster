@@ -505,6 +505,106 @@ def delete_row(request):
 
 
 @login_required
+def import_picking_v2(request):
+    """Parse the newer 'Plan report' export: Customer Name, Customer No,
+    Delivery Date, (blank), Order Total, Picked Total — one row per store
+    per date, covering all stores (not just currently open ones).
+
+    Rules (confirmed with the user):
+      - Never touches Ordered, only Remaining.
+      - Remaining = Order Total - Picked Total.
+      - If a store has more than one row that date (split-load duplicates),
+        only the row that already has Ordered > 0 (the "real" line) gets
+        updated; the zeroed duplicate line is left untouched.
+      - Closes the store (closed_status='Closed') when Remaining hits 0.
+      - Does NOT auto-close stores just for being absent from the file.
+    """
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    uploaded = request.FILES.get('file')
+    if not uploaded:
+        return JsonResponse({'error': 'No file uploaded'}, status=400)
+
+    fname = uploaded.name.lower()
+    if not fname.endswith('.csv'):
+        return JsonResponse({'error': 'This report must be a CSV file.'}, status=400)
+
+    raw = uploaded.read()
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode('latin-1')
+        except UnicodeDecodeError:
+            text = raw.decode('utf-8', errors='replace')
+
+    all_rows = list(csv.reader(io.StringIO(text)))
+
+    # Find the header row (the one that contains "Customer No") instead of
+    # assuming a fixed position, since a title/blank row sits above it.
+    header_idx = None
+    for i, r in enumerate(all_rows):
+        normalized = [c.strip().lower() for c in r]
+        if 'customer no' in normalized:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return JsonResponse({'error': 'Could not find header row ("Customer No" column not found).'}, status=400)
+
+    updated = not_found = skipped = 0
+
+    for row in all_rows[header_idx + 1:]:
+        if len(row) < 6:
+            skipped += 1
+            continue
+
+        store_id = row[1].strip()
+        if not store_id.isdigit():
+            # Footer / summary rows (e.g. "Monday 20 July 2026 ... Page 1 of 1")
+            # don't have a numeric Customer No, so they're skipped harmlessly.
+            skipped += 1
+            continue
+
+        row_date = _parse_date_val(row[2])
+        if not row_date:
+            skipped += 1
+            continue
+
+        order_total  = _to_int(row[4])
+        picked_total = _to_int(row[5])
+        remaining    = max(0, order_total - picked_total)
+
+        matches = list(DailyPlan.objects.filter(date=row_date, store_id_raw=store_id))
+
+        target_plan = None
+        if len(matches) == 1:
+            target_plan = matches[0]
+        elif len(matches) > 1:
+            nonzero = [p for p in matches if p.ordered > 0]
+            if len(nonzero) == 1:
+                target_plan = nonzero[0]
+
+        if not target_plan:
+            not_found += 1
+            continue
+
+        target_plan.remaining = remaining
+        update_fields = ['remaining', 'updated_at']
+        if remaining == 0:
+            target_plan.closed_status = 'Closed'
+            update_fields.append('closed_status')
+        target_plan.save(update_fields=update_fields)
+        _sync_to_yardmaster(target_plan)
+        updated += 1
+
+    return JsonResponse({'ok': True, 'updated': updated, 'not_found': not_found, 'skipped': skipped})
+
+
+@login_required
 def export_plan(request):
     date_filter = request.GET.get('date', str(date.today()))
     plans = DailyPlan.objects.select_related('store').filter(date=date_filter)

@@ -248,6 +248,7 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
   <button class="tbar-btn" id="btn-delete-row" onclick="deleteSelectedRow()" disabled style="border-color:rgba(255,77,109,0.3);color:var(--danger);">🗑 Delete</button>
   <button class="tbar-btn tbar-btn-import" onclick="openModal('plan')">↑ Import Plan</button>
   <button class="tbar-btn tbar-btn-picking" onclick="openModal('picking')">↑ Update Picking</button>
+  <button class="tbar-btn tbar-btn-picking" onclick="openModal('picking2')">↑ Update Picking (All Stores)</button>
   {% endif %}
   <button class="tbar-btn tbar-btn-export" onclick="exportPlan()">↓ Export</button>
   <div id="refresh-wrap" style="position:relative;">
@@ -427,6 +428,23 @@ body.light tr.row-complete td *  { color: #1c4a2c !important; }
     <div class="modal-footer">
       <button class="mbtn mbtn-ghost" onclick="closeModal('picking')">Cancel</button>
       <button class="mbtn mbtn-warn" id="btn-do-picking" onclick="doImport('picking')" disabled>Update Numbers</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPDATE PICKING (ALL STORES) MODAL -->
+<div class="modal-backdrop" id="modal-picking2">
+  <div class="modal">
+    <h3>↑ Update Picking (All Stores)</h3>
+    <p>Upload the <strong>Plan report</strong> CSV (Customer Name, Customer No, Delivery Date, Order Total, Picked Total). Covers all stores, not just open ones — matched by date, not the date filter above.</p>
+    <div class="drop-zone" id="dz-picking2" onclick="document.getElementById('fi-picking2').click()">
+      <input type="file" id="fi-picking2" accept=".csv" onchange="handleFile('picking2', this.files[0])">
+      <div id="dz-picking2-label">📂 &nbsp;Click or drag CSV here</div>
+    </div>
+    <div class="import-result" id="res-picking2"></div>
+    <div class="modal-footer">
+      <button class="mbtn mbtn-ghost" onclick="closeModal('picking2')">Cancel</button>
+      <button class="mbtn mbtn-warn" id="btn-do-picking2" onclick="doImport('picking2')" disabled>Update Numbers</button>
     </div>
   </div>
 </div>
@@ -664,7 +682,7 @@ function handleFile(type, file) {
   document.getElementById(`btn-do-${type}`).disabled = false;
 }
 
-['plan','picking'].forEach(type => {
+['plan','picking','picking2'].forEach(type => {
   const dz = document.getElementById(`dz-${type}`);
   if (!dz) return;
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--accent)'; });
@@ -682,7 +700,7 @@ async function doImport(type) {
   fd.append('file', file);
   fd.append('date', document.getElementById('f-date').value || DATE_FILTER);
 
-  const url  = type === 'plan' ? '/daily/api/import-plan/' : '/daily/api/import-picking/';
+  const url  = '/daily/api/import-' + type + '/';
   const res  = await fetch(url, { method:'POST', headers:{'X-CSRFToken': CSRF}, body: fd });
   const data = await res.json();
   const el   = document.getElementById(`res-${type}`);
@@ -697,7 +715,13 @@ async function doImport(type) {
       }
       el.innerHTML = msg;
     }
-    else el.textContent = `✅ ${data.updated} stores updated. ${data.not_found} not found in plan.`;
+    else {
+      let msg = `✅ ${data.updated} stores updated. ${data.not_found} not found in plan.`;
+      if (typeof data.skipped === 'number') {
+        msg += ` ${data.skipped} rows skipped (footer/invalid rows).`;
+      }
+      el.textContent = msg;
+    }
     btn.textContent = 'Done — reload';
     btn.disabled = false;
     btn.onclick = () => location.reload();
